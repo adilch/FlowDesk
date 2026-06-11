@@ -86,7 +86,8 @@ def test_parallel_script_sequence() -> None:
     script = build_run_script(model, first_order_switch=None)
     assert "decomposePar -force" in script
     assert "mpirun -np 4 simpleFoam -parallel" in script
-    assert "reconstructPar -latestTime" in script
+    # all saved times must reach the case root, not just the last frame
+    assert "reconstructPar -newTimes" in script
     assert "touch case.foam" in script
     # state markers in order
     assert script.index("decomposing") < script.index("running")

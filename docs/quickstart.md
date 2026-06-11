@@ -47,6 +47,27 @@ It simulates 10 s of flow time with output every 0.2 s — the street takes
 snappyHexMesh cannot preserve true one-cell 2D meshes — stated here so you
 don't wonder.
 
+## Hydraulics: flow over a weir
+
+The **Flow over a weir** template is a channel with a generated half-depth weir:
+water accelerates over the crest and recirculates downstream — slice on Y at
+mid-channel to see it. It saves every 100th iteration with nothing purged, so
+the **Results time selector lets you scrub through the convergence history**,
+not just the final state.
+
+Honest scope note: this is single-phase with a rigid-lid (slip) surface. A true
+free-surface dam break (like SimFlow's interFoam tutorial) needs multiphase
+solvers — that is FlowDesk's Phase-2 hydraulics target, not in the MVP.
+
+### Controlling what gets saved
+
+Run stage → **Write controls (controlDict)**:
+
+- *Write every* — iterations (steady) or seconds (transient) between saves.
+- *Keep last N writes* — OpenFOAM's `purgeWrite`; **0 keeps everything**.
+  Steady templates other than the weir default to keeping the last 2.
+- Format and precision, with a live disk-use estimate.
+
 ## Where things live
 
 - Your project = one OpenFOAM case directory (+ `flowdesk.json` sidecar).

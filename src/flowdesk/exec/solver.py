@@ -89,7 +89,10 @@ def build_run_script(model: CaseModel, first_order_switch: int | None) -> str:
     if parallel:
         lines += [
             'echo "FLOWDESK_STATE: reconstructing"',
-            "reconstructPar -latestTime || fail $?",
+            # -newTimes reconstructs every saved time not yet in the case root
+            # (-latestTime per the PRD example dropped all earlier frames from
+            # the Results view - found by a user)
+            "reconstructPar -newTimes || fail $?",
         ]
     lines += [
         "touch case.foam",
