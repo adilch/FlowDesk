@@ -53,5 +53,17 @@ class ViewerWidget(QWidget):
         self.plotter.reset_camera()
         return mesh
 
+    def show_domain_box(self, bounds_min, bounds_max) -> None:
+        """Wireframe outline of the blockMesh background box (§4.3.1)."""
+        (x0, y0, z0), (x1, y1, z1) = bounds_min, bounds_max
+        box = pv.Box(bounds=(x0, x1, y0, y1, z0, z1))
+        self.plotter.add_mesh(
+            box.extract_all_edges(),
+            name="_domain_box",
+            color=COLORS["accent"],
+            line_width=1,
+        )
+        self.plotter.reset_camera()
+
     def fit(self) -> None:
         self.plotter.reset_camera()
