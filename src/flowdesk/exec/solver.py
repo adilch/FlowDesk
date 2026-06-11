@@ -41,9 +41,13 @@ class RunState(Enum):
     STOPPED = "stopped"
 
 
-def build_run_script(model: CaseModel, first_order_switch: int | None) -> str:
+def build_run_script(model: CaseModel, first_order_switch: int | None,
+                     set_fields: bool = False) -> str:
     """The detached run script. Markers drive the state machine; every FlowDesk
-    intervention is an explicit, visible log line (honesty rule)."""
+    intervention is an explicit, visible log line (honesty rule).
+
+    set_fields: initialize the free-surface water column (only on a virgin
+    case - a latestTime restart must not re-flood the domain)."""
     parallel = model.run.mode is RunMode.PARALLEL
     solver = model.physics.solver
     n = model.run.cores
@@ -59,6 +63,11 @@ def build_run_script(model: CaseModel, first_order_switch: int | None) -> str:
         "set -o pipefail",
         "fail() { echo \"FLOWDESK_STATE: failed\"; echo $1 > " + EXIT_NAME + "; exit $1; }",
     ]
+    if set_fields:
+        lines += [
+            'echo "FlowDesk: initializing the water column (setFields)"',
+            "setFields || fail $?",
+        ]
     if parallel:
         lines += [
             'echo "FLOWDESK_STATE: decomposing"',
@@ -134,7 +143,12 @@ class SolverSupervisor(QObject):
 
     def start(self, model: CaseModel, first_order_switch: int | None = None) -> None:
         self._set_state(RunState.WRITING)
-        script = build_run_script(model, first_order_switch)
+        # Free-surface cases get their water column on a virgin case only;
+        # restarts continue from the saved alpha.water field.
+        needs_set_fields = (model.physics.free_surface is not None
+                            and not self._has_result_times())
+        script = build_run_script(model, first_order_switch,
+                                  set_fields=needs_set_fields)
         (self.case_dir / SCRIPT_NAME).write_text(script, encoding="utf-8", newline="\n")
         (self.case_dir / LOG_NAME).write_text("", encoding="utf-8")  # fresh log
         (self.case_dir / EXIT_NAME).unlink(missing_ok=True)
@@ -164,6 +178,12 @@ class SolverSupervisor(QObject):
         self.line.emit(f"FlowDesk: run started (pid {self._pid}, detached - "
                        "survives FlowDesk closing)")
         self._timer.start()
+
+    def _has_result_times(self) -> bool:
+        return any(
+            p.is_dir() and p.name != "0"
+            and p.name.replace(".", "", 1).replace("e-", "", 1).isdigit()
+            for p in self.case_dir.iterdir())
 
     def _await_pid_file(self, timeout_s: float = 10.0) -> int | None:
         import time

@@ -28,6 +28,8 @@ _FACE_VERTICES = {
 FIELD_DIMENSIONS = {
     "U": (0, 1, -1, 0, 0, 0, 0),
     "p": (0, 2, -2, 0, 0, 0, 0),  # kinematic (p/rho)
+    "p_rgh": (1, -1, -2, 0, 0, 0, 0),  # Pa - interFoam is a rho-based solver
+    "alpha.water": (0, 0, 0, 0, 0, 0, 0),
     "k": (0, 2, -2, 0, 0, 0, 0),
     "omega": (0, 0, -1, 0, 0, 0, 0),
     "epsilon": (0, 2, -3, 0, 0, 0, 0),
@@ -37,6 +39,7 @@ FIELD_DIMENSIONS = {
 
 def generate_case(model: CaseModel) -> dict[str, str]:
     """All files FlowDesk manages, keyed by case-relative path (LF text)."""
+    free_surface = model.physics.free_surface is not None
     files: dict[str, str] = {
         "system/controlDict": control_dict(model),
         "system/fvSchemes": fv_schemes(model),
@@ -45,12 +48,15 @@ def generate_case(model: CaseModel) -> dict[str, str]:
         "constant/transportProperties": transport_properties(model),
         "constant/turbulenceProperties": turbulence_properties(model),
     }
+    if free_surface:
+        files["constant/g"] = gravity_file(model)
+        files["system/setFieldsDict"] = set_fields_dict(model)
     if model.geometry.surfaces:
         files["system/snappyHexMeshDict"] = snappy_hex_mesh_dict(model)
         files["system/surfaceFeatureExtractDict"] = surface_feature_extract_dict(model)
     if model.run.mode is RunMode.PARALLEL:
         files["system/decomposeParDict"] = decompose_par_dict(model)
-    for field in bc_matrix.fields_for(model.physics.turbulence):
+    for field in bc_matrix.fields_for(model.physics.turbulence, free_surface):
         files[f"0/{field}"] = field_file(model, field)
     return files
 
@@ -232,6 +238,40 @@ def surface_feature_extract_dict(model: CaseModel) -> str:
     return document("surfaceFeatureExtractDict", "\n".join(lines))
 
 
+def gravity_file(model: CaseModel) -> str:
+    fs = model.physics.free_surface
+    body = "\n".join([
+        entry("dimensions", "[0 1 -2 0 0 0 0]"),
+        entry("value", fmt(fs.gravity)),
+    ])
+    return document("g", body, cls="uniformDimensionedVectorField")
+
+
+def set_fields_dict(model: CaseModel) -> str:
+    """Initial water column: alpha.water = 1 inside the box, 0 elsewhere.
+    Run by the execution engine before the first solve (and after a reset)."""
+    fs = model.physics.free_surface
+    lines = [
+        "defaultFieldValues",
+        "(",
+        "    volScalarFieldValue alpha.water 0",
+        ");",
+        "",
+        "regions",
+        "(",
+        "    boxToCell",
+        "    {",
+        f"        box {fmt(fs.water_column_min)} {fmt(fs.water_column_max)};",
+        "        fieldValues",
+        "        (",
+        "            volScalarFieldValue alpha.water 1",
+        "        );",
+        "    }",
+        ");",
+    ]
+    return document("setFieldsDict", "\n".join(lines))
+
+
 def control_dict(model: CaseModel) -> str:
     p = model.physics
     if p.is_steady:
@@ -264,6 +304,12 @@ def control_dict(model: CaseModel) -> str:
             entry("deltaT", t.initial_dt),
             entry("adjustTimeStep", True),
             entry("maxCo", t.max_courant),
+        ]
+        if p.free_surface is not None:
+            # interface Courant limit: the interface must not cross a cell/step
+            lines.append(entry("maxAlphaCo", min(t.max_courant, 1.0)))
+            lines.append(entry("maxDeltaT", 1))
+        lines += [
             "",
             entry("writeControl", "adjustableRunTime"),
             entry("writeInterval", t.output_interval),
@@ -284,6 +330,8 @@ def control_dict(model: CaseModel) -> str:
 
 
 def fv_schemes(model: CaseModel) -> str:
+    if model.physics.free_surface is not None:
+        return _fv_schemes_interfoam(model)
     n = model.numerics
     p = model.physics
     ddt = "steadyState" if p.is_steady else n.transient.ddt_scheme
@@ -304,7 +352,36 @@ def fv_schemes(model: CaseModel) -> str:
     return document("fvSchemes", "\n".join(lines))
 
 
+def _fv_schemes_interfoam(model: CaseModel) -> str:
+    """interFoam scheme set (v2506 damBreak conventions): MULES interface
+    capture needs the vanLeer/interfaceCompression pair; momentum uses
+    linearUpwind. Customization beyond this is file-editor territory."""
+    p = model.physics
+    div = [
+        entry("div(rhoPhi,U)", "Gauss linearUpwind grad(U)"),
+        entry("div(phi,alpha)", "Gauss vanLeer"),
+        entry("div(phirb,alpha)", "Gauss linear"),
+    ]
+    if p.turbulence is not Turbulence.LAMINAR:
+        turb_fields = {"k", "omega"} if p.turbulence is Turbulence.K_OMEGA_SST \
+            else {"k", "epsilon"}
+        for f in sorted(turb_fields):
+            div.append(entry(f"div(phi,{f})", "Gauss upwind"))
+    div.append(entry("div(((rho*nuEff)*dev2(T(grad(U)))))", "Gauss linear"))
+
+    lines = block("ddtSchemes", [entry("default", "Euler")]) + [""]
+    lines += block("gradSchemes", [entry("default", "Gauss linear")]) + [""]
+    lines += block("divSchemes", [entry("default", "none")] + div) + [""]
+    lines += block("laplacianSchemes", [entry("default", "Gauss linear corrected")]) + [""]
+    lines += block("interpolationSchemes", [entry("default", "linear")]) + [""]
+    lines += block("snGradSchemes", [entry("default", "corrected")]) + [""]
+    lines += block("wallDist", [entry("method", "meshWave")])
+    return document("fvSchemes", "\n".join(lines))
+
+
 def fv_solution(model: CaseModel) -> str:
+    if model.physics.free_surface is not None:
+        return _fv_solution_interfoam(model)
     n = model.numerics
     p = model.physics
     turb_group = "(k|omega)" if p.turbulence is Turbulence.K_OMEGA_SST else "(k|epsilon)"
@@ -380,6 +457,68 @@ def fv_solution(model: CaseModel) -> str:
     return document("fvSolution", "\n".join(lines))
 
 
+def _fv_solution_interfoam(model: CaseModel) -> str:
+    """interFoam solution set: MULES for alpha, PCG for p_rgh, PISO-mode PIMPLE
+    (no relaxation - transient)."""
+    n = model.numerics
+    p = model.physics
+    solvers: list[str] = []
+    solvers += block('"alpha.water.*"', [
+        entry("nAlphaCorr", 2),
+        entry("nAlphaSubCycles", 1),
+        entry("cAlpha", 1),
+        entry("MULESCorr", "yes"),
+        entry("nLimiterIter", 3),
+        entry("solver", "smoothSolver"),
+        entry("smoother", "symGaussSeidel"),
+        entry("tolerance", 1e-8),
+        entry("relTol", 0),
+    ]) + [""]
+    solvers += block('"pcorr.*"', [
+        entry("solver", "PCG"),
+        entry("preconditioner", "DIC"),
+        entry("tolerance", 1e-5),
+        entry("relTol", 0),
+    ]) + [""]
+    solvers += block("p_rgh", [
+        entry("solver", "PCG"),
+        entry("preconditioner", "DIC"),
+        entry("tolerance", 1e-7),
+        entry("relTol", 0.05),
+    ]) + [""]
+    solvers += block("p_rghFinal", [entry("$p_rgh", ""), entry("relTol", 0)]) + [""]
+    velocity_group = '"(U|k|omega|epsilon)"'
+    solvers += block(velocity_group, [
+        entry("solver", "smoothSolver"),
+        entry("smoother", "symGaussSeidel"),
+        entry("tolerance", 1e-6),
+        entry("relTol", 0),
+    ]) + [""]
+    solvers += block('"(U|k|omega|epsilon)Final"', [
+        entry("solver", "smoothSolver"),
+        entry("smoother", "symGaussSeidel"),
+        entry("tolerance", 1e-6),
+        entry("relTol", 0),
+    ])
+
+    n_correctors = (
+        n.n_non_orthogonal_correctors
+        if n.n_non_orthogonal_correctors is not None
+        else auto_non_orth_correctors(
+            model.mesh.result.quality.max_non_ortho if model.mesh.result else None
+        )
+    )
+    pimple = [
+        entry("momentumPredictor", "no"),
+        entry("nOuterCorrectors", 1),
+        entry("nCorrectors", 3),
+        entry("nNonOrthogonalCorrectors", n_correctors),
+    ]
+    _ = p  # turbulence handled via the velocity group regex above
+    lines = block("solvers", solvers) + [""] + block("PIMPLE", pimple)
+    return document("fvSolution", "\n".join(lines))
+
+
 def decompose_par_dict(model: CaseModel) -> str:
     lines = [
         entry("numberOfSubdomains", model.run.cores),
@@ -398,11 +537,29 @@ def decompose_par_dict(model: CaseModel) -> str:
 
 
 def transport_properties(model: CaseModel) -> str:
-    lines = [
+    fs = model.physics.free_surface
+    if fs is None:
+        lines = [
+            entry("transportModel", "Newtonian"),
+            "",
+            dimensioned("nu", (0, 2, -1, 0, 0, 0, 0), model.physics.fluid.nu),
+        ]
+        return document("transportProperties", "\n".join(lines))
+
+    # Two-phase (interFoam): the Physics fluid is the heavy phase 'water'
+    heavy, light = model.physics.fluid, fs.light_phase
+    lines = [entry("phases", "(water air)"), ""]
+    lines += block("water", [
         entry("transportModel", "Newtonian"),
-        "",
-        dimensioned("nu", (0, 2, -1, 0, 0, 0, 0), model.physics.fluid.nu),
-    ]
+        dimensioned("nu", (0, 2, -1, 0, 0, 0, 0), heavy.nu),
+        dimensioned("rho", (1, -3, 0, 0, 0, 0, 0), heavy.rho),
+    ]) + [""]
+    lines += block("air", [
+        entry("transportModel", "Newtonian"),
+        dimensioned("nu", (0, 2, -1, 0, 0, 0, 0), light.nu),
+        dimensioned("rho", (1, -3, 0, 0, 0, 0, 0), light.rho),
+    ]) + [""]
+    lines.append(dimensioned("sigma", (1, 0, -2, 0, 0, 0, 0), fs.sigma))
     return document("transportProperties", "\n".join(lines))
 
 
@@ -450,9 +607,7 @@ def _internal_value(model: CaseModel, field: str):
                 if isinstance(bc, VelocityInlet):
                     return bc_matrix.resolve_inlet_vector(model, patch, bc)
         return (0, 0, 0)
-    if field == "p":
-        return 0
-    if field == "nut":
-        return 0
+    if field in ("p", "p_rgh", "nut", "alpha.water"):
+        return 0  # alpha.water's water column is applied by setFields, not here
     internal = bc_matrix._internal_turbulence(model)
     return internal[field]

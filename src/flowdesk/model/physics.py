@@ -30,16 +30,35 @@ class TransientTime(BaseModel):
 
 
 class Fluid(BaseModel):
-    """Kinematic viscosity presets (§4.4); name 'custom' allows arbitrary nu."""
+    """Kinematic viscosity presets (§4.4); name 'custom' allows arbitrary nu.
+
+    rho is only consulted by multiphase solvers (interFoam needs phase
+    densities); single-phase incompressible cases never write it."""
 
     name: str = "water"
     nu: float = 1.0e-6  # m^2/s
+    rho: float = 1000.0  # kg/m^3
 
 
 FLUID_PRESETS = {
-    "water": Fluid(name="water", nu=1.0e-6),
-    "air": Fluid(name="air", nu=1.5e-5),
+    "water": Fluid(name="water", nu=1.0e-6, rho=1000.0),
+    "air": Fluid(name="air", nu=1.48e-5, rho=1.0),
 }
+
+
+class FreeSurfaceModel(BaseModel):
+    """Two-phase free surface via interFoam (Phase 2, PRD §1.3/§11).
+
+    The primary Physics fluid is the heavy phase ('water'); this model adds
+    the light phase, surface tension, gravity, and the initial water region
+    (applied by setFields before the first solve)."""
+
+    light_phase: Fluid = Field(default_factory=lambda: FLUID_PRESETS["air"].model_copy())
+    sigma: float = 0.07  # surface tension, N/m (water-air)
+    gravity: tuple[float, float, float] = (0.0, 0.0, -9.81)
+    # initial water column (box, SI): alpha.water = 1 inside, 0 elsewhere
+    water_column_min: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    water_column_max: tuple[float, float, float] = (0.1, 0.1, 0.1)
 
 
 class TurbRef(BaseModel):
@@ -55,10 +74,14 @@ class PhysicsModel(BaseModel):
     turbulence: Turbulence = Turbulence.K_OMEGA_SST
     fluid: Fluid = Field(default_factory=lambda: FLUID_PRESETS["water"].model_copy())
     turb_ref: TurbRef = Field(default_factory=TurbRef)
+    # None = single-phase (MVP behavior); set = interFoam free surface (Phase 2)
+    free_surface: FreeSurfaceModel | None = None
 
     @property
     def solver(self) -> str:
         """Users think in physics; the solver name stays visible for transparency (§4.4)."""
+        if self.free_surface is not None:
+            return "interFoam"
         return "simpleFoam" if isinstance(self.time, SteadyTime) else "pimpleFoam"
 
     @property

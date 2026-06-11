@@ -201,6 +201,36 @@ class CaseModel(BaseModel):
                 Severity.WARNING, Stage.PHYSICS,
                 f"Turbulence intensity {i:g}% is outside the typical 0.1–20% range.",
                 "physics.turb_ref.intensity"))
+
+        fs = self.physics.free_surface
+        if fs is not None:
+            if self.physics.is_steady:
+                out.append(Finding(
+                    Severity.ERROR, Stage.PHYSICS,
+                    "Free-surface (interFoam) cases are transient. → Physics → "
+                    "Switch time treatment to Transient.", "physics.time"))
+            if all(abs(g) < 1e-12 for g in fs.gravity):
+                out.append(Finding(
+                    Severity.ERROR, Stage.PHYSICS,
+                    "Gravity is zero — a free surface needs gravity. → Physics → "
+                    "Set the gravity vector.", "physics.free_surface.gravity"))
+            if fs.light_phase.nu <= 0 or fs.light_phase.rho <= 0:
+                out.append(Finding(
+                    Severity.ERROR, Stage.PHYSICS,
+                    "Light-phase properties must be > 0. → Physics → Fix the "
+                    "second fluid.", "physics.free_surface.light_phase"))
+            b = self.mesh.block
+            inside = all(
+                b.bounds_min[i] <= fs.water_column_min[i]
+                and fs.water_column_max[i] <= b.bounds_max[i]
+                and fs.water_column_min[i] < fs.water_column_max[i]
+                for i in range(3))
+            if not inside:
+                out.append(Finding(
+                    Severity.ERROR, Stage.PHYSICS,
+                    "Initial water column must be a non-empty box inside the "
+                    "domain. → Physics → Fix the water column bounds.",
+                    "physics.free_surface.water_column"))
         return out
 
     def _validate_boundaries(self) -> list[Finding]:
@@ -230,10 +260,26 @@ class CaseModel(BaseModel):
                     "type is not 'empty'. → Mesh → Set the patch type to empty "
                     "and re-mesh.", f"bc.{name}"))
 
+        # Atmosphere requires free-surface physics; with one present, the
+        # pressure level is referenced and no inlet/outlet pair is required
+        # (a collapsing dam has neither)
+        has_atmosphere = any(bc.kind == "atmosphere" for bc in self.boundaries.values())
+        if has_atmosphere and self.physics.free_surface is None:
+            out.append(Finding(
+                Severity.ERROR, Stage.BOUNDARIES,
+                "Atmosphere BC needs free-surface physics. → Physics → Enable "
+                "Free surface (interFoam), or pick a different BC type.", "bc"))
+        if self.physics.free_surface is not None and not has_atmosphere \
+                and not self.enclosed_domain:
+            out.append(Finding(
+                Severity.WARNING, Stage.BOUNDARIES,
+                "Free-surface case with no Atmosphere boundary — air cannot "
+                "escape. Usually the top patch should be Atmosphere.", "bc"))
+
         kinds = [bc.kind for bc in self.boundaries.values()]
         inlets = [n for n, bc in self.boundaries.items() if bc.kind == "velocityInlet"]
-        has_outlet = any(k in ("pressureOutlet", "outflow") for k in kinds)
-        if not self.enclosed_domain:
+        has_outlet = any(k in ("pressureOutlet", "outflow", "atmosphere") for k in kinds)
+        if not self.enclosed_domain and not has_atmosphere:
             if not inlets:
                 out.append(Finding(
                     Severity.ERROR, Stage.BOUNDARIES,

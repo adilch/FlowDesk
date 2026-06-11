@@ -24,6 +24,9 @@ FIELD_LABELS = {
     "Ux": ("U", 0), "Uy": ("U", 1), "Uz": ("U", 2),
     "p": ("p", None), "k": ("k", None), "omega": ("omega", None),
     "epsilon": ("epsilon", None), "nut": ("nut", None),
+    # free surface (interFoam)
+    "alpha.water": ("alpha.water", None),
+    "p_rgh": ("p_rgh", None),
 }
 
 

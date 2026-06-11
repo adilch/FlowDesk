@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from flowdesk.foam.emitter import entry, fmt
 from flowdesk.model.boundaries import (
+    Atmosphere,
     Empty,
     Outflow,
     PhysicalBC,
@@ -34,13 +35,17 @@ _INWARD = {
 }
 
 
-def fields_for(turbulence: Turbulence) -> list[str]:
-    """Field files the case needs (§4.5: laminar drops k/omega/nut entirely)."""
+def fields_for(turbulence: Turbulence, free_surface: bool = False) -> list[str]:
+    """Field files the case needs (§4.5: laminar drops k/omega/nut entirely).
+
+    interFoam replaces kinematic p with p_rgh (Pa - it is a rho-based solver)
+    and adds the alpha.water phase fraction."""
+    pressure = ["p_rgh", "alpha.water"] if free_surface else ["p"]
     if turbulence is Turbulence.LAMINAR:
-        return ["U", "p"]
+        return ["U", *pressure]
     if turbulence is Turbulence.K_EPSILON:
-        return ["U", "p", "k", "epsilon", "nut"]
-    return ["U", "p", "k", "omega", "nut"]
+        return ["U", *pressure, "k", "epsilon", "nut"]
+    return ["U", *pressure, "k", "omega", "nut"]
 
 
 def resolve_inlet_vector(model: CaseModel, patch: str, bc: VelocityInlet) -> Vec3:
@@ -82,13 +87,38 @@ def inlet_turbulence_values(model: CaseModel, bc: VelocityInlet, speed: float) -
 
 
 def patch_entries(model: CaseModel, patch: str, bc: PhysicalBC, field: str) -> list[str]:
-    """Inner lines of one patch block in one field file - the §4.5 matrix."""
+    """Inner lines of one patch block in one field file - the §4.5 matrix,
+    extended for interFoam fields (p_rgh, alpha.water) in Phase 2."""
     turb = model.physics.turbulence
+    free_surface = model.physics.free_surface is not None
 
     if isinstance(bc, Symmetry):
         return [entry("type", "symmetry")]
     if isinstance(bc, Empty):
         return [entry("type", "empty")]
+
+    if isinstance(bc, Atmosphere):
+        if not free_surface:
+            raise ValueError(
+                "Atmosphere BC requires free-surface physics (interFoam)")
+        match field:
+            case "U":
+                return [entry("type", "pressureInletOutletVelocity"),
+                        entry("value", "uniform (0 0 0)")]
+            case "p_rgh":
+                return [entry("type", "totalPressure"),
+                        entry("p0", "uniform 0")]
+            case "alpha.water":
+                return [entry("type", "inletOutlet"),
+                        entry("inletValue", "uniform 0"),
+                        entry("value", "uniform 0")]
+            case "k" | "omega" | "epsilon":
+                v = fmt(_internal_turbulence(model)[field])
+                return [entry("type", "inletOutlet"),
+                        entry("inletValue", f"uniform {v}"),
+                        entry("value", f"uniform {v}")]
+            case "nut":
+                return [entry("type", "calculated"), entry("value", "uniform 0")]
 
     if isinstance(bc, VelocityInlet):
         vec = resolve_inlet_vector(model, patch, bc)
@@ -99,6 +129,12 @@ def patch_entries(model: CaseModel, patch: str, bc: PhysicalBC, field: str) -> l
                 return [entry("type", "fixedValue"), entry("value", f"uniform {fmt(vec)}")]
             case "p":
                 return [entry("type", "zeroGradient")]
+            case "p_rgh":
+                return [entry("type", "fixedFluxPressure"),
+                        entry("value", "uniform 0")]
+            case "alpha.water":
+                # a velocity inlet in a free-surface case feeds water
+                return [entry("type", "fixedValue"), entry("value", "uniform 1")]
             case "k" | "omega" | "epsilon":
                 return [entry("type", "fixedValue"),
                         entry("value", f"uniform {fmt(tv[field])}")]
@@ -109,12 +145,22 @@ def patch_entries(model: CaseModel, patch: str, bc: PhysicalBC, field: str) -> l
         internal = _internal_turbulence(model)
         match field:
             case "U":
+                if free_surface:
+                    return [entry("type", "pressureInletOutletVelocity"),
+                            entry("value", "uniform (0 0 0)")]
                 return [entry("type", "inletOutlet"),
                         entry("inletValue", "uniform (0 0 0)"),
                         entry("value", "uniform (0 0 0)")]
             case "p":
                 return [entry("type", "fixedValue"),
                         entry("value", f"uniform {fmt(bc.gauge_pressure)}")]
+            case "p_rgh":
+                return [entry("type", "totalPressure"),
+                        entry("p0", f"uniform {fmt(bc.gauge_pressure)}")]
+            case "alpha.water":
+                return [entry("type", "inletOutlet"),
+                        entry("inletValue", "uniform 0"),
+                        entry("value", "uniform 0")]
             case "k" | "omega" | "epsilon":
                 v = fmt(internal[field])
                 return [entry("type", "inletOutlet"),
@@ -133,6 +179,12 @@ def patch_entries(model: CaseModel, patch: str, bc: PhysicalBC, field: str) -> l
                 return [entry("type", "noSlip")]
             case "p":
                 return [entry("type", "zeroGradient")]
+            case "p_rgh":
+                # gravity-consistent wall pressure (damBreak convention)
+                return [entry("type", "fixedFluxPressure"),
+                        entry("value", "uniform 0")]
+            case "alpha.water":
+                return [entry("type", "zeroGradient")]
             case "k":
                 return [entry("type", "kqRWallFunction"),
                         entry("value", f"uniform {fmt(internal['k'])}")]
@@ -150,6 +202,9 @@ def patch_entries(model: CaseModel, patch: str, bc: PhysicalBC, field: str) -> l
         match field:
             case "U":
                 return [entry("type", "slip")]
+            case "p_rgh":
+                return [entry("type", "fixedFluxPressure"),
+                        entry("value", "uniform 0")]
             case "nut":
                 return [entry("type", "calculated"), entry("value", "uniform 0")]
             case _:

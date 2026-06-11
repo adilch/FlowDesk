@@ -213,6 +213,10 @@ class ResultsStage(QWidget):
         if field == "p":
             self._add_banner(
                 "kinematic pressure (p/ρ, m²/s²) — multiply by ρ for Pa", "warn")
+        elif field == "p_rgh":
+            self._add_banner(
+                "p_rgh is p − ρgh in Pa (interFoam) — true pressure minus the "
+                "hydrostatic column", "info")
         cmap = results_io.COLORMAPS[self.cmap_combo.currentText()]
         plotter = self.viewer.plotter
         plotter.clear()

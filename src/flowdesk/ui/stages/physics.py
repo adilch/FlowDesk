@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QGridLayout,
     QHBoxLayout,
@@ -22,7 +23,13 @@ from flowdesk.model.physics import (
     TransientTime,
     Turbulence,
 )
-from flowdesk.ui.components import Banner, SegmentedControl, UnitLineEdit, make_button
+from flowdesk.ui.components import (
+    Banner,
+    SegmentedControl,
+    UnitLineEdit,
+    Vec3Input,
+    make_button,
+)
 from flowdesk.ui.theme import GROUP_GAP, PANEL_PADDING
 
 TURBULENCE_LABELS = {
@@ -135,6 +142,52 @@ class PhysicsStage(QWidget):
         self.transient_box.setVisible(not physics.is_steady)
         layout.addWidget(self.transient_box)
 
+        # Free surface (interFoam) - Phase 2
+        fs = physics.free_surface
+        self.free_surface_chk = QCheckBox("Free surface (interFoam) — two-phase "
+                                          "water/air with gravity")
+        self.free_surface_chk.setChecked(fs is not None)
+        self.free_surface_chk.toggled.connect(self._on_free_surface_toggled)
+        layout.addWidget(self.free_surface_chk)
+
+        self.fs_box = QWidget()
+        fsg = QGridLayout(self.fs_box)
+        fsg.setContentsMargins(0, 0, 0, 0)
+        from flowdesk.model.physics import FreeSurfaceModel
+
+        fs_values = fs if fs is not None else FreeSurfaceModel()
+        fsg.addWidget(QLabel("Water column min"), 0, 0)
+        self.column_min = Vec3Input(unit="m", value=fs_values.water_column_min)
+        fsg.addWidget(self.column_min, 0, 1)
+        fsg.addWidget(QLabel("Water column max"), 1, 0)
+        self.column_max = Vec3Input(unit="m", value=fs_values.water_column_max)
+        fsg.addWidget(self.column_max, 1, 1)
+        fsg.addWidget(QLabel("Gravity"), 2, 0)
+        self.gravity = Vec3Input(unit="m/s²", value=fs_values.gravity)
+        fsg.addWidget(self.gravity, 2, 1)
+        fsg.addWidget(QLabel("Surface tension σ"), 3, 0)
+        self.sigma = UnitLineEdit(value=fs_values.sigma, minimum=0.0)
+        self.sigma.setToolTip("N/m; 0.07 for water-air (OpenFOAM keyword: sigma)")
+        fsg.addWidget(self.sigma, 3, 1)
+        fsg.addWidget(QLabel("Air: ν / ρ"), 4, 0)
+        air_row = QHBoxLayout()
+        self.air_nu = UnitLineEdit(unit="m2/s", value=fs_values.light_phase.nu,
+                                   minimum=1e-12)
+        self.air_rho = UnitLineEdit(value=fs_values.light_phase.rho, minimum=1e-9)
+        self.air_rho.setToolTip("kg/m³")
+        air_row.addWidget(self.air_nu)
+        air_row.addWidget(self.air_rho)
+        air_holder = QWidget()
+        air_holder.setLayout(air_row)
+        fsg.addWidget(air_holder, 4, 1)
+        note = QLabel("The Physics fluid above is the heavy phase (water). "
+                      "setFields fills the column at run start.")
+        note.setProperty("role", "caption")
+        note.setWordWrap(True)
+        fsg.addWidget(note, 5, 0, 1, 2)
+        self.fs_box.setVisible(fs is not None)
+        layout.addWidget(self.fs_box)
+
         self.apply_btn = make_button("Apply", "primary")
         self.apply_btn.clicked.connect(self.apply)
         layout.addWidget(self.apply_btn)
@@ -147,7 +200,27 @@ class PhysicsStage(QWidget):
 
     def _on_time_changed(self, index: int) -> None:
         self.transient_box.setVisible(index == 1)
-        self.solver_label.setText(f"solver: {'simpleFoam' if index == 0 else 'pimpleFoam'}")
+        self._update_solver_label(transient=index == 1)
+
+    def _on_free_surface_toggled(self, checked: bool) -> None:
+        self.fs_box.setVisible(checked)
+        if checked and self.time_seg.current() == 0:
+            # interFoam is transient-only: switch and say so
+            self.time_seg._group.button(1).setChecked(True)
+            self._on_time_changed(1)
+            self._add_banner("Free-surface cases are transient — switched the "
+                             "time treatment for you.", "info")
+        else:
+            self._update_solver_label()
+
+    def _update_solver_label(self, transient: bool | None = None) -> None:
+        if transient is None:
+            transient = self.time_seg.current() == 1
+        if self.free_surface_chk.isChecked():
+            solver = "interFoam"
+        else:
+            solver = "pimpleFoam" if transient else "simpleFoam"
+        self.solver_label.setText(f"solver: {solver}")
 
     def _on_fluid_changed(self, label: str) -> None:
         key = FLUID_LABELS.get(label, "custom")
@@ -192,6 +265,20 @@ class PhysicsStage(QWidget):
             physics.fluid = FLUID_PRESETS[fluid_key].model_copy()
         else:
             physics.fluid = Fluid(name="custom", nu=self.nu_edit.value())
+
+        if self.free_surface_chk.isChecked():
+            from flowdesk.model.physics import FreeSurfaceModel
+
+            physics.free_surface = FreeSurfaceModel(
+                light_phase=Fluid(name="air", nu=self.air_nu.value(),
+                                  rho=self.air_rho.value()),
+                sigma=self.sigma.value(),
+                gravity=self.gravity.value(),
+                water_column_min=self.column_min.value(),
+                water_column_max=self.column_max.value(),
+            )
+        else:
+            physics.free_surface = None
         physics.turb_ref.velocity_scale = self.u_ref.value()
         physics.turb_ref.intensity = self.intensity.value()
         physics.turb_ref.length_scale = self.length.value()

@@ -47,6 +47,28 @@ It simulates 10 s of flow time with output every 0.2 s — the street takes
 snappyHexMesh cannot preserve true one-cell 2D meshes — stated here so you
 don't wonder.
 
+## Free surface: the dam break
+
+The **Dam break (free surface)** template is the classic interFoam case: a
+0.146 m × 0.292 m water column collapses across a 0.584 m tank under gravity
+(2D, laminar — matching the canonical OpenFOAM tutorial).
+
+1. New Project → *Dam break (free surface)*.
+2. **Mesh → Generate Mesh** (pure blockMesh; instant).
+3. **Run** — FlowDesk runs `setFields` first (you'll see it in the log) to
+   place the water column, then interFoam. About 10 s of wall time for 1 s of
+   flow at 50 output frames.
+4. **Results**: pick the **alpha.water** field (1 = water, 0 = air) and step
+   through time — collapse, surge across the floor, impact and climb up the
+   right wall (~0.5 s), then slosh back. *Open in ParaView* and threshold at
+   alpha = 0.5 to see the free surface itself.
+
+Free-surface physics lives in **Physics → Free surface (interFoam)**: second
+fluid, surface tension, gravity, and the initial water column box. The
+**Atmosphere (open)** BC type is the matching open-top boundary. Restarting a
+finished run does *not* re-flood the column (setFields only runs on a virgin
+case) — use *Reset case & rerun* to start the collapse over.
+
 ## Hydraulics: flow over a weir
 
 The **Flow over a weir** template is a channel with a generated half-depth weir:

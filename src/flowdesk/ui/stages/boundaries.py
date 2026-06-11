@@ -19,6 +19,7 @@ from PyQt6.QtWidgets import (
 
 from flowdesk.app.projects import ProjectSession
 from flowdesk.model.boundaries import (
+    Atmosphere,
     Empty,
     Outflow,
     PhysicalBC,
@@ -40,7 +41,8 @@ from flowdesk.ui.components import (
 from flowdesk.ui.theme import PANEL_PADDING, PATCH_COLORS, RIGHT_PANEL_WIDTH
 
 BC_TYPES = ["Velocity inlet", "Pressure outlet", "Wall (no-slip)", "Slip wall",
-            "Symmetry", "Outflow (zero-gradient)", "Empty (2D)"]
+            "Symmetry", "Outflow (zero-gradient)", "Empty (2D)",
+            "Atmosphere (open)"]
 
 _KIND_TO_LABEL = {
     "velocityInlet": "Velocity inlet",
@@ -50,6 +52,7 @@ _KIND_TO_LABEL = {
     "symmetry": "Symmetry",
     "outflow": "Outflow (zero-gradient)",
     "empty": "Empty (2D)",
+    "atmosphere": "Atmosphere (open)",
 }
 
 _KIND_TO_COLOR_KEY = {
@@ -186,6 +189,15 @@ class BoundariesStage(QWidget):
 
         self._params_stack.addWidget(QWidget())  # Empty (2D): no parameters
 
+        atmosphere = QWidget()  # Atmosphere: free-surface only, explained inline
+        v = QVBoxLayout(atmosphere)
+        v.setContentsMargins(0, 4, 0, 4)
+        v.addWidget(Banner(
+            "Open boundary to still air (free-surface cases): total-pressure "
+            "reference, air re-enters on backflow. Requires Free surface "
+            "enabled in Physics.", "info"))
+        self._params_stack.addWidget(atmosphere)
+
     # ------------------------------------------------------------------ data
 
     def _selected_patches(self) -> list[str]:
@@ -210,6 +222,8 @@ class BoundariesStage(QWidget):
             return Symmetry()
         if label == "Outflow (zero-gradient)":
             return Outflow()
+        if label == "Atmosphere (open)":
+            return Atmosphere()
         return Empty()
 
     # ------------------------------------------------------------------ actions

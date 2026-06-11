@@ -10,11 +10,24 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from flowdesk.model.boundaries import Empty, PressureOutlet, SlipWall, VelocityInlet, Wall
+from flowdesk.model.boundaries import (
+    Atmosphere,
+    Empty,
+    PressureOutlet,
+    SlipWall,
+    VelocityInlet,
+    Wall,
+)
 from flowdesk.model.case import CaseModel, ProjectMeta
 from flowdesk.model.mesh import BlockFace, BlockMeshModel, BlockPatch, SurfaceRefinement
 from flowdesk.model.numerics import Preset, RunMode, make_preset
-from flowdesk.model.physics import FLUID_PRESETS, Fluid, TransientTime, Turbulence
+from flowdesk.model.physics import (
+    FLUID_PRESETS,
+    Fluid,
+    FreeSurfaceModel,
+    TransientTime,
+    Turbulence,
+)
 
 
 def empty_case(name: str) -> CaseModel:
@@ -275,6 +288,48 @@ def _prepare_weir_flow(model: CaseModel, case_dir: Path) -> None:
     model.geometry.blockmesh_only = False
 
 
+def dam_break(name: str) -> CaseModel:
+    """The classic dam break (free surface, interFoam): a 0.146 m x 0.292 m
+    water column collapses across a 0.584 m tank. 2D (one cell thick,
+    empty front/back - pure blockMesh, so true 2D works). Laminar, like the
+    canonical OpenFOAM tutorial; ~1 s of flow time, output every 0.02 s."""
+    model = CaseModel(meta=ProjectMeta(name=name))
+    model.geometry.blockmesh_only = True
+    model.physics.turbulence = Turbulence.LAMINAR
+    model.physics.fluid = Fluid(name="water", nu=1e-6, rho=1000.0)
+    model.physics.time = TransientTime(
+        end_time=1.0, output_interval=0.02, max_courant=1.0, initial_dt=1e-4)
+    model.physics.free_surface = FreeSurfaceModel(
+        light_phase=Fluid(name="air", nu=1.48e-5, rho=1.0),
+        sigma=0.07,
+        gravity=(0.0, 0.0, -9.81),
+        water_column_min=(0.0, 0.0, 0.0),
+        water_column_max=(0.1461, 0.0146, 0.292),
+    )
+    model.mesh.block = BlockMeshModel(
+        bounds_min=(0.0, 0.0, 0.0),
+        bounds_max=(0.584, 0.0146, 0.584),
+        cells=(64, 1, 64),
+        patches=[
+            BlockPatch(name="leftWall", type="wall", faces=[BlockFace.X_MIN]),
+            BlockPatch(name="rightWall", type="wall", faces=[BlockFace.X_MAX]),
+            BlockPatch(name="lowerWall", type="wall", faces=[BlockFace.Z_MIN]),
+            BlockPatch(name="atmosphere", faces=[BlockFace.Z_MAX]),
+            BlockPatch(name="frontAndBack", type="empty",
+                       faces=[BlockFace.Y_MIN, BlockFace.Y_MAX]),
+        ],
+    )
+    model.boundaries = {
+        "leftWall": Wall(),
+        "rightWall": Wall(),
+        "lowerWall": Wall(),
+        "atmosphere": Atmosphere(),
+        "frontAndBack": Empty(),
+    }
+    model.run.mode = RunMode.SERIAL  # 4k cells: decomposition would cost more
+    return model
+
+
 TEMPLATES: dict[str, Callable[[str], CaseModel]] = {
     "Empty case": empty_case,
     "Lid-driven cavity": cavity,
@@ -282,6 +337,7 @@ TEMPLATES: dict[str, Callable[[str], CaseModel]] = {
     "External aero": external_aero,
     "Open channel": open_channel,
     "Flow over a weir": weir_flow,
+    "Dam break (free surface)": dam_break,
     "Vortex shedding (transient)": vortex_shedding,
 }
 

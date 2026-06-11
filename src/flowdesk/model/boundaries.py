@@ -58,8 +58,16 @@ class Empty(BaseModel):
     kind: Literal["empty"] = "empty"  # 2D cases
 
 
+class Atmosphere(BaseModel):
+    """Open boundary to still air (free-surface cases, Phase 2): total pressure
+    reference, air enters on backflow. The §4.5 union was left open for this."""
+
+    kind: Literal["atmosphere"] = "atmosphere"
+
+
 PhysicalBC = Annotated[
-    VelocityInlet | PressureOutlet | Wall | SlipWall | Symmetry | Outflow | Empty,
+    VelocityInlet | PressureOutlet | Wall | SlipWall | Symmetry | Outflow | Empty
+    | Atmosphere,
     Field(discriminator="kind"),
 ]
 
@@ -72,4 +80,5 @@ BLOCK_PATCH_TYPE = {
     "symmetry": "symmetry",
     "outflow": "patch",
     "empty": "empty",
+    "atmosphere": "patch",
 }
