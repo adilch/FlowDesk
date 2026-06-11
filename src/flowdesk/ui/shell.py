@@ -97,6 +97,9 @@ class ProjectShell(QWidget):
         self.geometry_stage.model_changed.connect(lambda _s: self.mesh_stage.refresh())
         self.physics_stage.model_changed.connect(
             lambda _s: self.boundaries_stage.refresh())
+        # The drawer attaches the moment a mesh pipeline starts, so progress
+        # and every blockMesh/snappy line stream into the log live
+        self.mesh_stage.mesh_started.connect(self.drawer.attach)
         self.mesh_stage.mesh_completed.connect(self._on_mesh_completed)
         self.boundaries_stage.selection_changed.connect(
             self.viewer.highlight_patches)
@@ -235,8 +238,6 @@ class ProjectShell(QWidget):
     # ------------------------------------------------------------------ status
 
     def _on_model_changed(self, _stage: Stage) -> None:
-        if self.mesh_stage.runner is not None:
-            self.drawer.attach(self.mesh_stage.runner)
         self._connect_supervisor_log()
         self._refresh_status()
 

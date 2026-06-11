@@ -76,6 +76,9 @@ class SnappyPanel(QWidget):
     def __init__(self, session: ProjectSession, parent: QWidget | None = None):
         super().__init__(parent)
         self.session = session
+        # Set by MeshStage: collects the Background form into the model so
+        # Suggest/regions see the domain the user typed, not stale bounds
+        self.collect_background = lambda: None
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 8, 0, 0)
@@ -276,6 +279,7 @@ class SnappyPanel(QWidget):
 
     def suggest_location(self) -> None:
         self._clear_banners()
+        self.collect_background()  # un-applied domain bounds count too
         self.collect_into_model()
         point = mesh_suggest.suggest_location_in_mesh(
             self.session.model, self.session.case_dir)
@@ -295,6 +299,7 @@ class SnappyPanel(QWidget):
             self.session.model, self.session.case_dir, point)
 
     def _add_region(self, shape: str) -> None:
+        self.collect_background()  # default region size derives from the domain
         block = self.session.model.mesh.block
         lo, hi = block.bounds_min, block.bounds_max
         center = tuple((a + b) / 2 for a, b in zip(lo, hi, strict=True))

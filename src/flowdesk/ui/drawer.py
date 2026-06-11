@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+
 from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -45,7 +47,19 @@ class RunDrawer(QFrame):
         self._runner: PipelineRunner | None = None
 
     def attach(self, runner: PipelineRunner) -> None:
-        """Wire a pipeline's signals into the drawer for the duration of a run."""
+        """Wire a pipeline's signals into the drawer for the duration of a run.
+        Idempotent per runner; detaches the previous one (no duplicate lines,
+        no stale Stop targets)."""
+        if runner is self._runner:
+            return
+        if self._runner is not None:
+            for signal, slot in ((self._runner.line, self._on_line),
+                                 (self._runner.step_started, self._on_step_started),
+                                 (self._runner.state_changed, self._on_state)):
+                with contextlib.suppress(TypeError):
+                    signal.disconnect(slot)
+            with contextlib.suppress(TypeError):
+                self.cancel_btn.clicked.disconnect(self._runner.cancel)
         self._runner = runner
         runner.line.connect(self._on_line)
         runner.step_started.connect(self._on_step_started)

@@ -129,6 +129,7 @@ class BackgroundPanel(QWidget):
 
 class MeshStage(QWidget):
     model_changed = pyqtSignal(Stage)
+    mesh_started = pyqtSignal(object)  # the PipelineRunner, for drawer attach
     mesh_completed = pyqtSignal(bool)
 
     def __init__(self, session: ProjectSession, env: Environment,
@@ -161,6 +162,8 @@ class MeshStage(QWidget):
 
         self.background = BackgroundPanel(session)
         self.snappy = SnappyPanel(session)
+        # Suggest/regions must see un-applied Background form values
+        self.snappy.collect_background = self.background.collect
         self.tabs = QTabWidget()
         self.tabs.addTab(self.background, "Background")
         self.tabs.addTab(self.snappy, "Refinement")
@@ -249,6 +252,7 @@ class MeshStage(QWidget):
                               self._parser, self._layer_parser)
         self.generate_btn.setEnabled(False)
         self.runner.finished.connect(lambda ok: self._on_pipeline_done(ok, old_patches))
+        self.mesh_started.emit(self.runner)  # drawer attaches BEFORE output flows
         self.runner.run(steps)
 
     def _on_pipeline_done(self, ok: bool, old_patches: list[str]) -> None:
