@@ -1,10 +1,12 @@
 """Project window shell (PRD §5.1): rail | stage content | drawer | status bar.
 
 One window, one project. The single shared viewer instance migrates between
-viewer-dominant stages.
+viewer-dominant stages. On open, a live solver run is re-attached (§4.7).
 """
 
 from __future__ import annotations
+
+import contextlib
 
 from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
@@ -20,8 +22,12 @@ from flowdesk.model.findings import Severity, Stage
 from flowdesk.platform.commands import Environment
 from flowdesk.ui.drawer import RunDrawer
 from flowdesk.ui.rail import WorkflowRail
+from flowdesk.ui.stages.boundaries import BoundariesStage, patch_color
 from flowdesk.ui.stages.geometry import GeometryStage, PlaceholderStage
 from flowdesk.ui.stages.mesh import MeshStage
+from flowdesk.ui.stages.numerics import NumericsStage
+from flowdesk.ui.stages.physics import PhysicsStage
+from flowdesk.ui.stages.run import RunStage
 from flowdesk.ui.viewer import ViewerWidget
 
 
@@ -38,13 +44,17 @@ class ProjectShell(QWidget):
 
         self.geometry_stage = GeometryStage(session)
         self.mesh_stage = MeshStage(session, env)
+        self.physics_stage = PhysicsStage(session)
+        self.boundaries_stage = BoundariesStage(session)
+        self.numerics_stage = NumericsStage(session)
+        self.run_stage = RunStage(session, env)
         self._stages: dict[Stage, QWidget] = {
             Stage.GEOMETRY: self.geometry_stage,
             Stage.MESH: self.mesh_stage,
-            Stage.PHYSICS: PlaceholderStage("Physics", "M4"),
-            Stage.BOUNDARIES: PlaceholderStage("Boundary Conditions", "M4"),
-            Stage.NUMERICS: PlaceholderStage("Numerics", "M4"),
-            Stage.RUN: PlaceholderStage("Run", "M4"),
+            Stage.PHYSICS: self.physics_stage,
+            Stage.BOUNDARIES: self.boundaries_stage,
+            Stage.NUMERICS: self.numerics_stage,
+            Stage.RUN: self.run_stage,
             Stage.RESULTS: PlaceholderStage("Results", "M5"),
         }
 
@@ -74,11 +84,15 @@ class ProjectShell(QWidget):
 
         # Signals
         self.rail.stage_selected.connect(self.show_stage)
-        self.geometry_stage.model_changed.connect(self._on_model_changed)
-        self.geometry_stage.model_changed.connect(
-            lambda _s: self.mesh_stage.refresh())
-        self.mesh_stage.model_changed.connect(self._on_model_changed)
+        for stage_widget in (self.geometry_stage, self.mesh_stage, self.physics_stage,
+                             self.boundaries_stage, self.numerics_stage,
+                             self.run_stage):
+            stage_widget.model_changed.connect(self._on_model_changed)
+        self.geometry_stage.model_changed.connect(lambda _s: self.mesh_stage.refresh())
+        self.physics_stage.model_changed.connect(
+            lambda _s: self.boundaries_stage.refresh())
         self.mesh_stage.mesh_completed.connect(self._on_mesh_completed)
+        self.run_stage.run_finished.connect(lambda _ok: self._refresh_status())
 
         # Keyboard: Ctrl+1..7 (§5.2)
         for i, stage in enumerate(Stage, start=1):
@@ -89,18 +103,29 @@ class ProjectShell(QWidget):
         self.rail.select(Stage.GEOMETRY)
         self._refresh_status()
 
+        # §4.7 re-attach: a solver left running by a dead GUI is picked up
+        self._connected_supervisor = None
+        if self.run_stage.try_reattach():
+            self.show_stage(Stage.RUN)
+            self.rail.select(Stage.RUN)
+        self._connect_supervisor_log()
+
     # ------------------------------------------------------------------ navigation
 
     def show_stage(self, stage: Stage) -> None:
         self._stack.setCurrentWidget(self._stages[stage])
         self._move_viewer(stage)
-        self._refresh_viewer()
+        if stage is Stage.BOUNDARIES:
+            self.boundaries_stage.refresh()
+            self._color_patches()
+        else:
+            self._refresh_viewer()
 
     def _move_viewer(self, stage: Stage) -> None:
-        """The one viewer instance lives in whichever active stage wants it."""
         slots = {
             Stage.GEOMETRY: self.geometry_stage.viewer_slot,
             Stage.MESH: self.mesh_stage.viewer_slot,
+            Stage.BOUNDARIES: self.boundaries_stage.viewer_slot,
         }
         slot = slots.get(stage)
         if slot is None:
@@ -109,10 +134,9 @@ class ProjectShell(QWidget):
         slot.addWidget(self.viewer)
 
     def _refresh_viewer(self) -> None:
-        """Surfaces + domain box + refinement overlays + material-point marker."""
         model = self.session.model
         block = model.mesh.block
-        try:
+        with contextlib.suppress(Exception):
             self.viewer.show_domain_box(block.bounds_min, block.bounds_max)
             for surface in model.geometry.surfaces:
                 stl = self.session.case_dir / "constant" / "triSurface" / f"{surface.name}.stl"
@@ -122,15 +146,20 @@ class ProjectShell(QWidget):
                 self.viewer.show_region_overlay(region.name, region.geometry)
             if model.mesh.snappy.location_in_mesh is not None:
                 self.viewer.show_location_marker(model.mesh.snappy.location_in_mesh)
-        except Exception:
-            pass  # viewer is best-effort; stage content never depends on it
+
+    def _color_patches(self) -> None:
+        """BC stage viewer: meshed patches colored by assignment (§4.5/§6.1)."""
+        with contextlib.suppress(Exception):
+            assignments = {
+                patch: patch_color(self.session.model.boundaries.get(patch))
+                for patch in self.session.model.expected_patches()
+            }
+            self.viewer.show_patches(self.session.case_dir, assignments)
 
     def _on_mesh_completed(self, ok: bool) -> None:
         if not ok:
             return
-        # Mesh preview (§4.3.3) - best-effort; quality report is authoritative
-        import contextlib
-
+        self.boundaries_stage.refresh()
         with contextlib.suppress(Exception):
             self.viewer.load_openfoam_mesh(self.session.case_dir)
 
@@ -139,7 +168,14 @@ class ProjectShell(QWidget):
     def _on_model_changed(self, _stage: Stage) -> None:
         if self.mesh_stage.runner is not None:
             self.drawer.attach(self.mesh_stage.runner)
+        self._connect_supervisor_log()
         self._refresh_status()
+
+    def _connect_supervisor_log(self) -> None:
+        supervisor = self.run_stage.supervisor
+        if supervisor is not None and supervisor is not self._connected_supervisor:
+            supervisor.line.connect(self.drawer.log.append_line)
+            self._connected_supervisor = supervisor
 
     def _refresh_status(self) -> None:
         statuses = self.session.stage_statuses()

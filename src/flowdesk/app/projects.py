@@ -46,6 +46,10 @@ class ProjectSession:
                 out[stage] = "stale"
                 continue
             out[stage] = stage_status(findings, stage, self._started(stage))
+        # Mesh settings can be valid without a mesh existing yet: the stage is
+        # only ✔ once the pipeline has actually produced one (§4.0 Run gating)
+        if out[Stage.MESH] == "complete" and self.model.mesh.result is None:
+            out[Stage.MESH] = "in_progress"
         return out
 
     def _started(self, stage: Stage) -> bool:

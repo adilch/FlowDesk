@@ -89,6 +89,31 @@ class ViewerWidget(QWidget):
                 + (bounds[5] - bounds[4]) ** 2) ** 0.5
         return max(diag / 150.0, 1e-6)
 
+    def show_patches(self, case_dir: Path, assignments: dict[str, str | None]) -> bool:
+        """BC stage (§4.5): meshed boundary patches as actors colored by their
+        assigned BC (Okabe-Ito palette); unassigned renders hazard-amber."""
+        foam_file = case_dir / "case.foam"
+        try:
+            foam_file.touch()
+            reader = pv.OpenFOAMReader(str(foam_file))
+            reader.enable_all_patch_arrays()
+            data = reader.read()
+            boundaries = data["boundary"]
+        except Exception:
+            return False
+        self.plotter.clear()
+        patch_names = boundaries.keys()  # MultiBlock: .keys() is the only name API
+        for name in patch_names:
+            patch = boundaries[name]
+            color = assignments.get(name) or COLORS["warn"]
+            self.plotter.add_mesh(
+                patch, name=f"_patch_{name}", color=color,
+                opacity=1.0 if assignments.get(name) else 0.85,
+                show_edges=False, smooth_shading=False,
+            )
+        self.plotter.reset_camera()
+        return True
+
     def load_openfoam_mesh(self, case_dir: Path) -> int | None:
         """Mesh preview (§4.3.3): surface-with-edges of the current polyMesh.
 

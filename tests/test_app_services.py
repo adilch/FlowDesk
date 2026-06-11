@@ -125,6 +125,15 @@ def test_stage_statuses_for_fresh_cavity(tmp_path) -> None:
     statuses = session.stage_statuses()
     assert statuses[Stage.GEOMETRY] == "complete"
     assert statuses[Stage.BOUNDARIES] == "complete"
+    # §4.0: Run stays gated until a mesh actually exists
+    assert statuses[Stage.MESH] == "in_progress"
+    assert not session.run_enabled()
+
+    from flowdesk.model.mesh import MeshResult, QualityReport
+
+    session.model.mesh.result = MeshResult(cell_count=400,
+                                           quality=QualityReport(mesh_ok=True))
+    assert session.stage_statuses()[Stage.MESH] == "complete"
     assert session.run_enabled()
 
 
