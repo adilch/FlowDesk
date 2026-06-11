@@ -27,6 +27,26 @@ then `pip install flowdesk` / run the AppImage (packaging in progress).
    can close FlowDesk and re-open later; it re-attaches.
 8. **Results**: slice, probe, screenshot — or *Open in ParaView*.
 
+## Try a transient case
+
+The **Vortex shedding (transient)** template is the recommended first transient
+run: laminar flow past a square cylinder at Re = 100 — a textbook von Kármán
+vortex street. The cylinder geometry is generated for you.
+
+1. New Project → *Vortex shedding (transient)*.
+2. **Mesh → Generate Mesh** (snappy refines around the cylinder; ~30 s).
+3. **Run** — watch the Courant readout and the residuals oscillate as shedding
+   develops (that's physics, not divergence).
+4. **Results**: step through the time selector to watch vortices convect, or
+   *Open in ParaView* and animate. Probe a point at (1.0, 0, 0.025) and step
+   times to see the periodic velocity signal.
+
+It simulates 10 s of flow time with output every 0.2 s — the street takes
+~5 s to develop, then sheds periodically. About two minutes of wall time on
+4 cores. The case is quasi-2D (thin slab, slip front/back) because
+snappyHexMesh cannot preserve true one-cell 2D meshes — stated here so you
+don't wonder.
+
 ## Where things live
 
 - Your project = one OpenFOAM case directory (+ `flowdesk.json` sidecar).

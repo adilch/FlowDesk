@@ -9,7 +9,7 @@ from pathlib import Path
 
 from flowdesk.app.settings import AppSettings, RecentProject
 from flowdesk.app.staleness import StalenessTracker
-from flowdesk.app.templates import TEMPLATES
+from flowdesk.app.templates import TEMPLATE_PREPARERS, TEMPLATES
 from flowdesk.model.case import SIDECAR_NAME, CaseModel, InvalidCaseError
 from flowdesk.model.findings import Severity, Stage, stage_status
 
@@ -88,6 +88,10 @@ def create_project(name: str, location: Path, template: str,
     case_dir.mkdir(parents=True, exist_ok=False)
     model = TEMPLATES[template](name)
     model.meta.created = datetime.now(UTC).isoformat(timespec="seconds")
+
+    preparer = TEMPLATE_PREPARERS.get(template)
+    if preparer is not None:
+        preparer(model, case_dir)  # geometry-bearing templates generate their STL
 
     # Templates are complete runnable cases: write the case files now when valid;
     # the Empty template has nothing valid to write yet - sidecar only.
