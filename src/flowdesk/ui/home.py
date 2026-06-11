@@ -131,8 +131,11 @@ class HomeScreen(QWidget):
         new_btn.clicked.connect(self._new_dialog)
         open_btn = make_button("Open Project…")
         open_btn.clicked.connect(self._open_dialog)
+        settings_btn = make_button("Environment…", "ghost")
+        settings_btn.clicked.connect(self._environment_dialog)
         actions.addWidget(new_btn)
         actions.addWidget(open_btn)
+        actions.addWidget(settings_btn)
         actions.addStretch()
         layout.addLayout(actions)
 
@@ -182,3 +185,8 @@ class HomeScreen(QWidget):
         chosen = QFileDialog.getExistingDirectory(self, "Open project")
         if chosen:
             self.open_requested.emit(Path(chosen))
+
+    def _environment_dialog(self) -> None:
+        from flowdesk.ui.environment_panel import EnvironmentDialog
+
+        EnvironmentDialog(self.env, self).exec()

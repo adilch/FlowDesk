@@ -23,10 +23,11 @@ from flowdesk.platform.commands import Environment
 from flowdesk.ui.drawer import RunDrawer
 from flowdesk.ui.rail import WorkflowRail
 from flowdesk.ui.stages.boundaries import BoundariesStage, patch_color
-from flowdesk.ui.stages.geometry import GeometryStage, PlaceholderStage
+from flowdesk.ui.stages.geometry import GeometryStage
 from flowdesk.ui.stages.mesh import MeshStage
 from flowdesk.ui.stages.numerics import NumericsStage
 from flowdesk.ui.stages.physics import PhysicsStage
+from flowdesk.ui.stages.results import ResultsStage
 from flowdesk.ui.stages.run import RunStage
 from flowdesk.ui.viewer import ViewerWidget
 
@@ -48,6 +49,7 @@ class ProjectShell(QWidget):
         self.boundaries_stage = BoundariesStage(session)
         self.numerics_stage = NumericsStage(session)
         self.run_stage = RunStage(session, env)
+        self.results_stage = ResultsStage(session, self.viewer)
         self._stages: dict[Stage, QWidget] = {
             Stage.GEOMETRY: self.geometry_stage,
             Stage.MESH: self.mesh_stage,
@@ -55,7 +57,7 @@ class ProjectShell(QWidget):
             Stage.BOUNDARIES: self.boundaries_stage,
             Stage.NUMERICS: self.numerics_stage,
             Stage.RUN: self.run_stage,
-            Stage.RESULTS: PlaceholderStage("Results", "M5"),
+            Stage.RESULTS: self.results_stage,
         }
 
         self._stack = QStackedWidget()
@@ -118,6 +120,8 @@ class ProjectShell(QWidget):
         if stage is Stage.BOUNDARIES:
             self.boundaries_stage.refresh()
             self._color_patches()
+        elif stage is Stage.RESULTS:
+            self.results_stage.refresh()
         else:
             self._refresh_viewer()
 
@@ -126,6 +130,7 @@ class ProjectShell(QWidget):
             Stage.GEOMETRY: self.geometry_stage.viewer_slot,
             Stage.MESH: self.mesh_stage.viewer_slot,
             Stage.BOUNDARIES: self.boundaries_stage.viewer_slot,
+            Stage.RESULTS: self.results_stage.viewer_slot,
         }
         slot = slots.get(stage)
         if slot is None:
@@ -182,7 +187,8 @@ class ProjectShell(QWidget):
         enabled = {s: True for s in Stage}
         enabled[Stage.RUN] = self.session.run_enabled()
         result = self.session.model.mesh.result
-        enabled[Stage.RESULTS] = False  # M5
+        # §4.0: Results enabled when at least one time directory exists
+        enabled[Stage.RESULTS] = self.session._started(Stage.RESULTS)
         self.rail.update_statuses(statuses, enabled)
 
         findings = self.session.model.validate_full()

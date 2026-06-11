@@ -235,6 +235,10 @@ def surface_feature_extract_dict(model: CaseModel) -> str:
 def control_dict(model: CaseModel) -> str:
     p = model.physics
     if p.is_steady:
+        # Clamp: a write interval beyond endTime would end the run with zero
+        # results written (found the hard way - M5 results tests)
+        write_interval = min(model.run.write_interval_steady,
+                             model.run.max_iterations)
         lines = [
             entry("application", p.solver),
             "",
@@ -245,7 +249,7 @@ def control_dict(model: CaseModel) -> str:
             entry("deltaT", 1),
             "",
             entry("writeControl", "timeStep"),
-            entry("writeInterval", model.run.write_interval_steady),
+            entry("writeInterval", write_interval),
             entry("purgeWrite", model.run.purge_write),
         ]
     else:

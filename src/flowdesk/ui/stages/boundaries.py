@@ -244,11 +244,18 @@ class BoundariesStage(QWidget):
             for finding in exc.findings[:5]:
                 self._add_banner(finding.message, "error")
             return False
-        from flowdesk.foam import writer
+        from flowdesk.foam import polymesh, writer
 
         report = writer.write_case(validated, self.session.case_dir)
         for rel in report.skipped_detached:
             self._add_banner(f"{rel} is detached — not rewritten.", "warn")
+        # §4.5: wall functions require `type wall` in polyMesh/boundary itself
+        changes = polymesh.sync_boundary_types(self.session.model,
+                                               self.session.case_dir)
+        for patch, old, new in changes:
+            self._add_banner(
+                f"ℹ patch '{patch}' type updated in polyMesh/boundary: "
+                f"{old} → {new} (required by the assigned BC).", "info")
         self.session.staleness.clear(Stage.BOUNDARIES)
         self.refresh()
         self.model_changed.emit(Stage.BOUNDARIES)

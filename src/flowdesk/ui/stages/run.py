@@ -172,9 +172,10 @@ class RunStage(QWidget):
                              "error")
             return
 
-        from flowdesk.foam import writer
+        from flowdesk.foam import polymesh, writer
 
         writer.write_case(validated, self.session.case_dir)
+        polymesh.sync_boundary_types(self.session.model, self.session.case_dir)
         first_order = self._prepare_first_order_start()
         self.session.save_model()
 

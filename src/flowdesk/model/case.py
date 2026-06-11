@@ -219,6 +219,17 @@ class CaseModel(BaseModel):
                     f"BC assigned to unknown patch '{name}' (patch list changed?). → "
                     "Boundary Conditions → Remove or reassign.", f"bc.{name}"))
 
+        # Empty (2D) changes mesh topology: it must be the patch type at mesh
+        # time, not a post-hoc conversion (§4.5; wall/symmetry are synced)
+        block_types = {p.name: p.type for p in self.mesh.block.patches}
+        for name, bc in self.boundaries.items():
+            if bc.kind == "empty" and block_types.get(name, "empty") != "empty":
+                out.append(Finding(
+                    Severity.ERROR, Stage.BOUNDARIES,
+                    f"Patch '{name}' is assigned Empty (2D) but its mesh patch "
+                    "type is not 'empty'. → Mesh → Set the patch type to empty "
+                    "and re-mesh.", f"bc.{name}"))
+
         kinds = [bc.kind for bc in self.boundaries.values()]
         inlets = [n for n, bc in self.boundaries.items() if bc.kind == "velocityInlet"]
         has_outlet = any(k in ("pressureOutlet", "outflow") for k in kinds)
