@@ -96,10 +96,14 @@ class ProjectShell(QWidget):
         self.mesh_stage.mesh_completed.connect(self._on_mesh_completed)
         self.run_stage.run_finished.connect(lambda _ok: self._refresh_status())
 
-        # Keyboard: Ctrl+1..7 (§5.2)
+        # Keyboard (§5.2): Ctrl+1..7 stages, Ctrl+S save, Ctrl+R run, F fit viewer
         for i, stage in enumerate(Stage, start=1):
             shortcut = QShortcut(QKeySequence(f"Ctrl+{i}"), self)
             shortcut.activated.connect(lambda s=stage: self.show_stage(s))
+        QShortcut(QKeySequence("Ctrl+S"), self).activated.connect(self._force_save)
+        QShortcut(QKeySequence("Ctrl+R"), self).activated.connect(
+            lambda: self.show_stage(Stage.RUN))
+        QShortcut(QKeySequence("F"), self).activated.connect(self.viewer.fit)
 
         self.show_stage(Stage.GEOMETRY)
         self.rail.select(Stage.GEOMETRY)
@@ -175,6 +179,10 @@ class ProjectShell(QWidget):
             self.drawer.attach(self.mesh_stage.runner)
         self._connect_supervisor_log()
         self._refresh_status()
+
+    def _force_save(self) -> None:
+        self.session.save_model()
+        self.status_bar.setText("  model saved ✔")
 
     def _connect_supervisor_log(self) -> None:
         supervisor = self.run_stage.supervisor

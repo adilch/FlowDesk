@@ -22,6 +22,8 @@ class RecentProject:
 class AppSettings:
     recent: list[RecentProject] = field(default_factory=list)
     last_location: str = ""
+    coach_done: bool = False  # §5.3: the tutorial overlay never repeats unless asked
+    paraview_path: str = ""  # manual override when auto-detection misses
 
     @classmethod
     def _path(cls) -> Path:
@@ -35,7 +37,9 @@ class AppSettings:
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
             recent = [RecentProject(**r) for r in raw.get("recent", [])]
-            return cls(recent=recent, last_location=raw.get("last_location", ""))
+            return cls(recent=recent, last_location=raw.get("last_location", ""),
+                       coach_done=raw.get("coach_done", False),
+                       paraview_path=raw.get("paraview_path", ""))
         except (json.JSONDecodeError, TypeError):
             return cls()  # corrupted settings are not fatal
 
@@ -43,7 +47,9 @@ class AppSettings:
         path = self._path()
         path.parent.mkdir(parents=True, exist_ok=True)
         data = {"recent": [asdict(r) for r in self.recent],
-                "last_location": self.last_location}
+                "last_location": self.last_location,
+                "coach_done": self.coach_done,
+                "paraview_path": self.paraview_path}
         tmp = path.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
         tmp.replace(path)

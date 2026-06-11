@@ -10,6 +10,10 @@ build/
 .pytest_cache/
 .ruff_cache/
 
+# PyInstaller output (build via: uv run pyinstaller flowdesk.spec)
+build/
+dist/
+
 # Spike artifacts
 spikes/_test_sphere.stl
 

@@ -139,6 +139,12 @@ class HomeScreen(QWidget):
         actions.addStretch()
         layout.addLayout(actions)
 
+        # §5.3: 'Try the cavity tutorial' card - the only onboarding
+        if not settings.coach_done:
+            tutorial = make_button("▶ Try the cavity tutorial (2 min)", "ghost")
+            tutorial.clicked.connect(self._start_tutorial)
+            layout.addWidget(tutorial)
+
         recent_title = QLabel("RECENT")
         recent_title.setProperty("role", "section")
         layout.addWidget(recent_title)
@@ -190,3 +196,11 @@ class HomeScreen(QWidget):
         from flowdesk.ui.environment_panel import EnvironmentDialog
 
         EnvironmentDialog(self.env, self).exec()
+
+    def _start_tutorial(self) -> None:
+        from datetime import datetime
+
+        name = f"cavity-tutorial-{datetime.now().strftime('%H%M%S')}"
+        location = Path(self.settings.last_location or
+                        str(default_projects_dir(self.env)))
+        self.create_requested.emit(name, location, "Lid-driven cavity")

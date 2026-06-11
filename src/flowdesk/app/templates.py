@@ -78,8 +78,73 @@ def external_aero(name: str) -> CaseModel:
     return model
 
 
+def pipe_flow(name: str) -> CaseModel:
+    """Internal duct flow: rectangular duct, velocity inlet -> pressure outlet,
+    no-slip walls. (True circular pipes need an O-grid - Phase 2; the duct is
+    the §4.1 'Pipe flow' starting point for internal-flow setups.)"""
+    model = CaseModel(meta=ProjectMeta(name=name))
+    model.geometry.blockmesh_only = True
+    model.physics.turb_ref.velocity_scale = 1.0
+    model.physics.turb_ref.length_scale = 0.007  # 0.07 x hydraulic diameter (0.1 m)
+    model.mesh.block = BlockMeshModel(
+        bounds_min=(0.0, 0.0, 0.0),
+        bounds_max=(2.0, 0.1, 0.1),
+        cells=(60, 8, 8),
+        patches=[
+            BlockPatch(name="inlet", faces=[BlockFace.X_MIN]),
+            BlockPatch(name="outlet", faces=[BlockFace.X_MAX]),
+            BlockPatch(
+                name="walls", type="wall",
+                faces=[BlockFace.Y_MIN, BlockFace.Y_MAX,
+                       BlockFace.Z_MIN, BlockFace.Z_MAX],
+            ),
+        ],
+    )
+    model.boundaries = {
+        "inlet": VelocityInlet(speed=1.0),
+        "outlet": PressureOutlet(),
+        "walls": Wall(),
+    }
+    model.run.max_iterations = 1000
+    return model
+
+
+def open_channel(name: str) -> CaseModel:
+    """Open-channel flow, rigid-lid approximation: slip top stands in for the
+    free surface (honest single-phase MVP; true free-surface interFoam is the
+    Phase-2 hydraulics target, §1.3)."""
+    model = CaseModel(meta=ProjectMeta(name=name))
+    model.geometry.blockmesh_only = True
+    model.physics.turb_ref.velocity_scale = 0.5
+    model.physics.turb_ref.length_scale = 0.035  # 0.07 x depth
+    model.mesh.block = BlockMeshModel(
+        bounds_min=(0.0, 0.0, 0.0),
+        bounds_max=(5.0, 1.0, 0.5),
+        cells=(50, 10, 10),
+        patches=[
+            BlockPatch(name="inlet", faces=[BlockFace.X_MIN]),
+            BlockPatch(name="outlet", faces=[BlockFace.X_MAX]),
+            BlockPatch(name="bed", type="wall", faces=[BlockFace.Z_MIN]),
+            BlockPatch(name="banks", type="wall",
+                       faces=[BlockFace.Y_MIN, BlockFace.Y_MAX]),
+            BlockPatch(name="surface", faces=[BlockFace.Z_MAX]),
+        ],
+    )
+    model.boundaries = {
+        "inlet": VelocityInlet(speed=0.5),
+        "outlet": PressureOutlet(),
+        "bed": Wall(),
+        "banks": Wall(),
+        "surface": SlipWall(),  # rigid lid
+    }
+    model.run.max_iterations = 1000
+    return model
+
+
 TEMPLATES: dict[str, Callable[[str], CaseModel]] = {
     "Empty case": empty_case,
     "Lid-driven cavity": cavity,
+    "Pipe flow": pipe_flow,
     "External aero": external_aero,
+    "Open channel": open_channel,
 }

@@ -39,6 +39,10 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Could not create project", str(exc))
             return
         self._show_project(session)
+        if self._shell is not None:
+            from flowdesk.ui.coach import maybe_show_tutorial
+
+            maybe_show_tutorial(self._shell, self.settings, template)
 
     def _open_project(self, path: Path) -> None:
         try:

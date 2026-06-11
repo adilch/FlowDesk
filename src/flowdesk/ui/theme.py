@@ -309,8 +309,27 @@ QToolTip {{
 """
 
 
+def load_bundled_fonts() -> list[str]:
+    """Register the bundled Inter + JetBrains Mono (OFL; licenses ship alongside).
+    Falls back silently to system fonts when loading fails."""
+    from pathlib import Path
+
+    from PyQt6.QtGui import QFontDatabase
+
+    loaded = []
+    fonts_dir = Path(__file__).parent / "assets" / "fonts"
+    if not fonts_dir.exists():
+        return loaded
+    for ttf in sorted(fonts_dir.glob("*.ttf")):
+        font_id = QFontDatabase.addApplicationFont(str(ttf))
+        if font_id >= 0:
+            loaded += QFontDatabase.applicationFontFamilies(font_id)
+    return loaded
+
+
 def apply_theme(app) -> None:
     """Apply the FlowDesk theme to a QApplication. Call once at startup."""
+    load_bundled_fonts()
     app.setStyleSheet(build_qss())
 
 

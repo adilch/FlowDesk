@@ -35,6 +35,11 @@ Strict layering, imports only downward:
 
 ## State
 
-- M0 (scaffold, theme/gallery, foamlib + viewer + WSL-bridge spikes) ✅
-- Next: M1 — case model (§7.4), dictionary generation for §4, ownership/round-trip
-  engine (§4.9), file browser/editor, golden-file harness.
+All MVP milestones M0–M6 complete (2026-06-11). The full 15-minute journey,
+all four templates serial+parallel, round-trip/ownership, detached run with
+re-attach, results post-processing, environment flows, and the PyInstaller
+build (474 MB) are implemented and gate-tested against real OpenFOAM v2506
+via WSL. Remaining for release: human beta testing (§11 M6), clean-VM install
+verification, Ubuntu GUI pass, and code signing.
+
+Build the exe: `uv run pyinstaller flowdesk.spec --noconfirm` → dist/FlowDesk/.
