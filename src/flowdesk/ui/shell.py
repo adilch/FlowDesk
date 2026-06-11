@@ -168,6 +168,13 @@ class ProjectShell(QWidget):
                 self.viewer.show_region_overlay(region.name, region.geometry)
             if model.mesh.snappy.location_in_mesh is not None:
                 self.viewer.show_location_marker(model.mesh.snappy.location_in_mesh)
+            # init volume (free surface): visible wherever the domain is shown
+            fs = model.physics.free_surface
+            if fs is not None:
+                self.viewer.show_water_column(fs.water_column_min,
+                                              fs.water_column_max)
+            else:
+                self.viewer.hide_water_column()
 
     def _color_patches(self) -> None:
         """BC stage viewer: meshed patches colored by assignment (§4.5/§6.1)."""

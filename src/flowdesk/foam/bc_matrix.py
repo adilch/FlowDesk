@@ -133,8 +133,10 @@ def patch_entries(model: CaseModel, patch: str, bc: PhysicalBC, field: str) -> l
                 return [entry("type", "fixedFluxPressure"),
                         entry("value", "uniform 0")]
             case "alpha.water":
-                # a velocity inlet in a free-surface case feeds water
-                return [entry("type", "fixedValue"), entry("value", "uniform 1")]
+                if bc.alpha_water is None:  # face spans both phases
+                    return [entry("type", "zeroGradient")]
+                return [entry("type", "fixedValue"),
+                        entry("value", f"uniform {fmt(bc.alpha_water)}")]
             case "k" | "omega" | "epsilon":
                 return [entry("type", "fixedValue"),
                         entry("value", f"uniform {fmt(tv[field])}")]

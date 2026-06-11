@@ -30,6 +30,10 @@ class VelocityInlet(BaseModel):
     speed: float = 1.0  # m/s, used when mode == normal (positive into the domain)
     vector: Vec3 = (1.0, 0.0, 0.0)  # used when mode == vector
     turbulence: InletTurbulence = Field(default_factory=InletTurbulence)
+    # Free-surface cases only: phase fraction carried in by the inflow.
+    # 1.0 = pure water (submerged inlet); None = zeroGradient (the face spans
+    # both phases - e.g. a reservoir inlet taller than the water level)
+    alpha_water: float | None = 1.0
 
 
 class PressureOutlet(BaseModel):

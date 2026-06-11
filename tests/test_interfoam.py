@@ -127,7 +127,7 @@ def test_dam_break_template_validates() -> None:
 @requires_openfoam
 def test_dam_break_runs_and_water_surges(qtbot, tmp_path) -> None:
     """The dam-break example, end to end: mesh, setFields, interFoam, physics."""
-    session = projects.create_project("dambreak", tmp_path, "Dam break (free surface)")
+    session = projects.create_project("dambreak", tmp_path, "Dam break (2D column)")
     session.model.physics.time.end_time = 0.3  # shortened; users run 1 s
     session.model.physics.time.output_interval = 0.05
 

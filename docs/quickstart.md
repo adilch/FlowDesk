@@ -49,11 +49,23 @@ don't wonder.
 
 ## Free surface: the dam break
 
-The **Dam break (free surface)** template is the classic interFoam case: a
+Two dam-break templates ship:
+
+**Dam break (3D breach)** follows the SimFlow dam-break tutorial workflow: a
+50 × 30 × 20 m valley **domain** is meshed with the generated `dam.stl`
+**obstacle** carved out by snappyHexMesh (the material point sits downstream
+in the fluid at (10, 15, 5) — the domain is meshed, never the dam itself),
+and the **water_init volume** [-20..0, 0..30, 0..9] — drawn as a translucent
+blue box in the viewer — initializes the reservoir behind the dam. Run it and
+water pours through the 6 m breach. An upstream inlet feeds 250 m³/s with
+zero-gradient phase. Ships at 10 s of flow time; extend toward 60 s for the
+full tutorial draining.
+
+**Dam break (2D column)** is the classic fast benchmark: a
 0.146 m × 0.292 m water column collapses across a 0.584 m tank under gravity
 (2D, laminar — matching the canonical OpenFOAM tutorial).
 
-1. New Project → *Dam break (free surface)*.
+1. New Project → *Dam break (2D column)*.
 2. **Mesh → Generate Mesh** (pure blockMesh; instant).
 3. **Run** — FlowDesk runs `setFields` first (you'll see it in the log) to
    place the water column, then interFoam. About 10 s of wall time for 1 s of

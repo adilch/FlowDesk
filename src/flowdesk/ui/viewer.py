@@ -189,6 +189,19 @@ class ViewerWidget(QWidget):
         )
         self.plotter.reset_camera()
 
+    def show_water_column(self, bounds_min, bounds_max) -> None:
+        """Free-surface init volume: the water column as a translucent blue box
+        (the SimFlow-style 'water_init' region - initialization, never meshed)."""
+        (x0, y0, z0), (x1, y1, z1) = bounds_min, bounds_max
+        box = pv.Box(bounds=(x0, x1, y0, y1, z0, z1))
+        self.plotter.add_mesh(
+            box, name="_water_column",
+            color="#0072B2", opacity=0.30, show_edges=True,
+        )
+
+    def hide_water_column(self) -> None:
+        self.plotter.remove_actor("_water_column", render=False)
+
     def closeEvent(self, event) -> None:
         # Release the GL context before the native window dies (silences
         # vtkWin32OpenGLRenderWindow teardown errors)
