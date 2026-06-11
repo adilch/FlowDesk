@@ -239,6 +239,12 @@ class MeshStage(QWidget):
         if not self.env.available:
             self._add_banner(f"OpenFOAM is not available: {self.env.detail}", "error")
             return
+        from flowdesk.app.projects import openfoam_path_problem
+
+        path_problem = openfoam_path_problem(self.session.case_dir)
+        if path_problem:
+            self._add_banner(path_problem, "error")
+            return
         note = projected_cell_note(self.session.model)
         if note:
             self._add_banner(note, "info")

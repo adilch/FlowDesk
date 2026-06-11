@@ -18,7 +18,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from flowdesk.app.projects import validate_project_name
+from flowdesk.app.projects import openfoam_path_problem, validate_project_name
 from flowdesk.app.settings import AppSettings
 from flowdesk.app.templates import TEMPLATES
 from flowdesk.platform.commands import Environment, default_projects_dir, is_slow_location
@@ -81,9 +81,12 @@ class NewProjectDialog(QDialog):
             self._banner_slot.addWidget(Banner(error, "error"))
             return
         location = Path(self.location_edit.text())
-        if " " in self.name_edit.text():
-            self._banner_slot.addWidget(Banner(
-                "Spaces in the name will cause WSL path friction.", "warn"))
+        # Block OpenFOAM-hostile paths up front (spaces/parens in name OR any
+        # parent folder) - they fail fatally deep in the mesh pipeline otherwise
+        path_problem = openfoam_path_problem(location / self.name_edit.text())
+        if path_problem:
+            self._banner_slot.addWidget(Banner(path_problem, "error"))
+            return
         if is_slow_location(location, self.env):
             self._banner_slot.addWidget(Banner(
                 "This location is on a Windows drive: OpenFOAM I/O will be 5–20× "

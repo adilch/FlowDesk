@@ -15,6 +15,14 @@ from flowdesk.model.findings import Severity, Stage, stage_status
 
 _INVALID_NAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
+# OpenFOAM's fileName parser rejects whitespace, parentheses, quotes and a few
+# shell/parser-special characters anywhere in a case path. It calls
+# fileName::stripInvalid() and, at debug level >= 2 (the default in the ESI
+# Ubuntu packages), treats this as fatal - so a project under e.g.
+# "New folder (2)" dies in surfaceFeatureExtract/blockMesh with a cryptic error.
+# We check each path component (never the separators).
+_OPENFOAM_HOSTILE = re.compile(r"""[\s()\[\]{}"'#;&|<>$`]""")
+
 
 def validate_project_name(name: str) -> str | None:
     """Returns an error message or None. Spaces are a warning handled in the UI."""
@@ -23,6 +31,23 @@ def validate_project_name(name: str) -> str | None:
     if _INVALID_NAME_CHARS.search(name):
         return "Project name contains characters invalid on the target filesystem."
     return None
+
+
+def openfoam_path_problem(path: Path) -> str | None:
+    """Explanation if a case path contains characters OpenFOAM cannot handle
+    (spaces, parentheses, quotes, ...), else None. Checked per directory
+    component so path separators and the drive anchor are never flagged."""
+    bad: set[str] = set()
+    for part in Path(path).parts[1:]:  # skip the anchor (drive / root)
+        bad.update(_OPENFOAM_HOSTILE.findall(part))
+    if not bad:
+        return None
+    shown = ", ".join("space" if c.isspace() else f"'{c}'" for c in sorted(bad))
+    return (
+        f"The case path {path} contains characters OpenFOAM rejects: {shown}. "
+        "OpenFOAM aborts on these (e.g. a 'New folder (2)' parent). → Move or "
+        "rename the project and its parent folders to use only letters, "
+        "numbers, '_' and '-'.")
 
 
 @dataclass
