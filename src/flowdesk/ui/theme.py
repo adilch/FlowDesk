@@ -218,15 +218,18 @@ QHeaderView::section {{
 }}
 QTableWidget::item:selected {{ background-color: {c["accent"]}; }}
 
-/* ---- Progress bars ---- */
+/* ---- Progress bars: tall enough that the value text is readable ---- */
 QProgressBar {{
     background-color: {c["bg-2"]};
     border: none;
-    border-radius: 3px;
-    max-height: 6px;
+    border-radius: 4px;
+    min-height: 20px;
+    max-height: 20px;
     text-align: center;
+    color: {c["text-1"]};
+    font-weight: 600;
 }}
-QProgressBar::chunk {{ background-color: {c["run"]}; border-radius: 3px; }}
+QProgressBar::chunk {{ background-color: {c["run"]}; border-radius: 4px; }}
 
 /* ---- Scrollbars ---- */
 QScrollBar:vertical {{ background: {c["bg-1"]}; width: 10px; }}

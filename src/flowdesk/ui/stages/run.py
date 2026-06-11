@@ -64,6 +64,7 @@ class RunStage(QWidget):
         self.state_label = QLabel("Idle")
         self.progress = QProgressBar()
         self.progress.setRange(0, 1000)
+        self.progress.setFormat("%p%")
         self.eta_label = QLabel("")
         self.eta_label.setProperty("role", "caption")
         self.courant_label = QLabel("")
@@ -136,6 +137,13 @@ class RunStage(QWidget):
         buttons.addWidget(self.stop_btn)
         buttons.addWidget(self.kill_btn)
         form.addLayout(buttons)
+
+        self.reset_btn = make_button("Reset case & rerun…")
+        self.reset_btn.setToolTip(
+            "Delete results, decomposed processor dirs, and run logs (keeps the "
+            "mesh, dictionaries, and initial fields), then start a fresh run")
+        self.reset_btn.clicked.connect(self.reset_and_rerun)
+        form.addWidget(self.reset_btn)
 
         self._banner_slot = QVBoxLayout()
         form.addLayout(self._banner_slot)
@@ -230,6 +238,40 @@ class RunStage(QWidget):
         assert self.supervisor is not None
         self.supervisor.state_changed.connect(self._on_state)
         self.supervisor.finished.connect(self._on_finished)
+
+    # ------------------------------------------------------------------ reset
+
+    def reset_and_rerun(self, confirm: bool = True) -> None:
+        """Delete results + run artifacts (with confirmation), then run again."""
+        from flowdesk.app import case_ops
+        from flowdesk.exec.solver import RunState
+
+        if self.supervisor is not None and self.supervisor.state in (
+                RunState.RUNNING, RunState.DECOMPOSING, RunState.RECONSTRUCTING):
+            self._add_banner("A solver is running — Stop or Kill it before "
+                             "resetting.", "warn")
+            return
+        items = case_ops.resettable_items(self.session.case_dir)
+        if not items:
+            self.start_run()
+            return
+        if confirm:
+            from PyQt6.QtWidgets import QMessageBox
+
+            names = ", ".join(p.name for p in items[:8])
+            more = f" (+{len(items) - 8} more)" if len(items) > 8 else ""
+            answer = QMessageBox.question(
+                self, "Reset case",
+                f"Delete results and run artifacts?\n\n{names}{more}\n\n"
+                "The mesh, dictionaries, and initial fields are kept.")
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+        removed = case_ops.reset_case(self.session.case_dir)
+        self._clear_banners()
+        self._add_banner(f"Reset: removed {len(removed)} item(s). Starting a "
+                         "fresh run.", "info")
+        self.model_changed.emit(Stage.RUN)
+        self.start_run()
 
     # ------------------------------------------------------------------ stop/kill
 

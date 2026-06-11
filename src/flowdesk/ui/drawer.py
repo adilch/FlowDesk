@@ -31,6 +31,7 @@ class RunDrawer(QFrame):
         self.progress = QProgressBar()
         self.progress.setRange(0, 1)
         self.progress.setValue(0)
+        self.progress.setFormat("step %v / %m")
         self.cancel_btn = make_button("Stop", "danger")
         self.cancel_btn.setEnabled(False)
         header.addWidget(self.state_label, stretch=1)

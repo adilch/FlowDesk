@@ -8,10 +8,12 @@ from __future__ import annotations
 
 import contextlib
 
+from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
+    QMessageBox,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
@@ -33,6 +35,8 @@ from flowdesk.ui.viewer import ViewerWidget
 
 
 class ProjectShell(QWidget):
+    close_requested = pyqtSignal()
+
     def __init__(self, session: ProjectSession, env: Environment,
                  parent: QWidget | None = None):
         super().__init__(parent)
@@ -104,6 +108,13 @@ class ProjectShell(QWidget):
         QShortcut(QKeySequence("Ctrl+R"), self).activated.connect(
             lambda: self.show_stage(Stage.RUN))
         QShortcut(QKeySequence("F"), self).activated.connect(self.viewer.fit)
+
+        # Close project: back to Home (rail bottom; confirm when a run is live)
+        from flowdesk.ui.components import make_button
+
+        close_btn = make_button("←  Close project", "ghost")
+        close_btn.clicked.connect(self.request_close)
+        self.rail.layout().addWidget(close_btn)
 
         self.show_stage(Stage.GEOMETRY)
         self.rail.select(Stage.GEOMETRY)
@@ -179,6 +190,25 @@ class ProjectShell(QWidget):
             self.drawer.attach(self.mesh_stage.runner)
         self._connect_supervisor_log()
         self._refresh_status()
+
+    def request_close(self) -> None:
+        """Close the project (§5.2: confirm if running). The detached solver
+        keeps running either way - reopening the project re-attaches."""
+        from flowdesk.exec.solver import RunState
+
+        supervisor = self.run_stage.supervisor
+        if supervisor is not None and supervisor.state in (
+                RunState.RUNNING, RunState.DECOMPOSING, RunState.RECONSTRUCTING):
+            answer = QMessageBox.question(
+                self, "Close project",
+                "A solver is running. It will keep running in the background "
+                "(detached) and FlowDesk will re-attach when you reopen this "
+                "project.\n\nClose anyway?")
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            supervisor.detach()  # stop tailing; the process is untouched
+        self.session.save_model()
+        self.close_requested.emit()
 
     def _force_save(self) -> None:
         self.session.save_model()

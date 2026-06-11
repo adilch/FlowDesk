@@ -57,9 +57,20 @@ class MainWindow(QMainWindow):
             self._stack.removeWidget(self._shell)
             self._shell.deleteLater()
         self._shell = ProjectShell(session, self.env)
+        self._shell.close_requested.connect(self._close_project)
         self._stack.addWidget(self._shell)
         self._stack.setCurrentWidget(self._shell)
         self.setWindowTitle(f"FlowDesk — {session.model.meta.name}")
+
+    def _close_project(self) -> None:
+        """Back to Home; the shell (and its viewer) are torn down."""
+        if self._shell is not None:
+            self._stack.removeWidget(self._shell)
+            self._shell.deleteLater()
+            self._shell = None
+        self.home.refresh_recent()
+        self._stack.setCurrentWidget(self.home)
+        self.setWindowTitle("FlowDesk")
 
 
 def main() -> int:

@@ -8,9 +8,10 @@ from pathlib import Path
 
 import pyvista as pv
 from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtWidgets import QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from pyvistaqt import QtInteractor
 
+from flowdesk.ui.components import make_button
 from flowdesk.ui.theme import COLORS
 
 
@@ -23,10 +24,29 @@ class ViewerWidget(QWidget):
         super().__init__(parent)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        # Viewer toolbar (§4.2): standard views + fit, travels with the viewer
+        toolbar = QHBoxLayout()
+        toolbar.setContentsMargins(4, 2, 4, 2)
+        toolbar.addStretch()
+        for label, slot in (("X", self.view_x), ("Y", self.view_y),
+                            ("Z", self.view_z), ("Fit", self.fit)):
+            btn = make_button(label, "ghost")
+            btn.setFixedWidth(40 if label == "Fit" else 28)
+            btn.setToolTip(f"Look along the {label} axis"
+                           if label != "Fit" else "Fit view to scene (F)")
+            btn.clicked.connect(slot)
+            toolbar.addWidget(btn)
+        layout.addLayout(toolbar)
+
         self.plotter = QtInteractor(self)
         self.plotter.set_background(COLORS["viewport-bottom"], top=COLORS["viewport-top"])
         layout.addWidget(self.plotter)
         self._meshes: dict[str, pv.DataSet] = {}
+
+        # Orientation triad, bottom-right: which way is x/y/z at a glance
+        self.plotter.add_axes(viewport=(0.80, 0.0, 1.0, 0.25), line_width=2)
 
         # FPS via VTK render-event timing
         self.plotter.iren.add_observer("RenderEvent", self._on_render)
@@ -147,5 +167,24 @@ class ViewerWidget(QWidget):
         )
         self.plotter.reset_camera()
 
+    def closeEvent(self, event) -> None:
+        # Release the GL context before the native window dies (silences
+        # vtkWin32OpenGLRenderWindow teardown errors)
+        self.plotter.close()
+        super().closeEvent(event)
+
     def fit(self) -> None:
+        self.plotter.reset_camera()
+
+    # Standard views (§4.2): camera looking along the named axis
+    def view_x(self) -> None:
+        self.plotter.view_yz()
+        self.plotter.reset_camera()
+
+    def view_y(self) -> None:
+        self.plotter.view_xz()
+        self.plotter.reset_camera()
+
+    def view_z(self) -> None:
+        self.plotter.view_xy()
         self.plotter.reset_camera()
