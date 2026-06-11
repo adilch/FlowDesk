@@ -47,6 +47,40 @@ It simulates 10 s of flow time with output every 0.2 s — the street takes
 snappyHexMesh cannot preserve true one-cell 2D meshes — stated here so you
 don't wonder.
 
+## Build the dam break from an empty project
+
+The same workflow as SimFlow's dam-break tutorial, step by step. (The
+*Dam break (3D breach)* template is this, pre-built.) The 3D canvas stays
+visible at every step and previews each spatial input as you type it.
+
+1. **New Project → Empty case.**
+2. **1 Geometry → Import STL…** → your `dam.stl`. The dam appears in the
+   canvas with watertight/normals diagnostics.
+3. **2 Mesh → Background**: set Domain min `(-20, 0, 0)`, max `(30, 30, 20)`,
+   cells `70 × 45 × 30`. The blue domain-box outline follows as you type —
+   the dam sits inside it. *The domain is what gets meshed; the dam is carved
+   out of it.*
+4. **2 Mesh → Refinement**: the dam surface row is pre-listed (levels 1–2 are
+   fine). Set the **Material point** to `(10, 15, 5)` or press *Suggest* —
+   the orange marker must sit in open fluid, downstream of the dam, never
+   inside it. Optional: *+ Box* adds a refinement region, drawn translucent
+   in the canvas while you edit its dimensions in the table.
+5. **Generate Mesh** → watch the pipeline; the quality report goes green and
+   the preview shows the dam carved out of the domain.
+6. **3 Physics**: tick **Free surface (interFoam)** (FlowDesk switches you to
+   Transient). Set the water column min `(-20, 0, 0)`, max `(0, 30, 9)` — the
+   translucent blue *water_init* volume appears behind the dam as you type.
+   End time 10 s, output every 0.25 s.
+7. **4 Boundary Conditions**: `inlet` → Velocity inlet 0.42 m/s; `outlet` →
+   Pressure outlet; `sides` → Slip; `bottom` → Wall; `top` → Atmosphere
+   (open); `dam` → Wall. Selected patches highlight in the canvas.
+8. **5 Numerics**: leave Robust (interFoam uses its own MULES settings).
+9. **6 Run**: cores per your machine → **Run**. `setFields` fills the column
+   first (visible in the log), then interFoam streams residuals + Courant.
+10. **7 Results**: `alpha.water` or `U magnitude`; the default slice is a
+    vertical cut through the breach. *Open in ParaView* for the
+    threshold-at-0.5 free-surface view.
+
 ## Free surface: the dam break
 
 Two dam-break templates ship:

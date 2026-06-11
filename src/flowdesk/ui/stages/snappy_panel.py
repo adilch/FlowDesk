@@ -155,9 +155,23 @@ class SnappyPanel(QWidget):
         layout.addStretch()
         self.refresh_from_model()
 
+        # Live preview (region/marker overlays in the canvas) while editing
+        self.region_table.cellChanged.connect(lambda *_a: self.changed.emit())
+        self.location_input.valueChanged.connect(lambda *_a: self.changed.emit())
+
     # ------------------------------------------------------------------ model sync
 
     def refresh_from_model(self) -> None:
+        # repopulating must not fire live-preview signals
+        self.surface_table.blockSignals(True)
+        self.region_table.blockSignals(True)
+        try:
+            self._refresh_tables()
+        finally:
+            self.surface_table.blockSignals(False)
+            self.region_table.blockSignals(False)
+
+    def _refresh_tables(self) -> None:
         snappy = self.session.model.mesh.snappy
         by_name = {r.surface: r for r in snappy.surfaces}
         surfaces = self.session.model.geometry.surfaces
@@ -192,8 +206,6 @@ class SnappyPanel(QWidget):
                     item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 self.region_table.setItem(row, col, item)
 
-        if snappy.location_in_mesh is not None:
-            self.location_input = self.location_input  # value set at construction
 
     def collect_into_model(self) -> list[str]:
         """Table -> model. Returns human-readable problems (shown as banners)."""

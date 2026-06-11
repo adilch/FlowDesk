@@ -102,6 +102,17 @@ class ProjectShell(QWidget):
             self.viewer.highlight_patches)
         self.run_stage.run_finished.connect(lambda _ok: self._refresh_status())
 
+        # Live canvas previews while editing spatial inputs (SimFlow-style:
+        # you see the domain / regions / water column as you type them)
+        background = self.mesh_stage.background
+        for vec in (background.bounds_min, background.bounds_max):
+            vec.valueChanged.connect(lambda *_a: self._preview_domain())
+        self.mesh_stage.snappy.changed.connect(self._preview_snappy)
+        physics = self.physics_stage
+        physics.free_surface_chk.toggled.connect(lambda _c: self._preview_column())
+        for vec in (physics.column_min, physics.column_max):
+            vec.valueChanged.connect(lambda *_a: self._preview_column())
+
         # Keyboard (§5.2): Ctrl+1..7 stages, Ctrl+S save, Ctrl+R run, F fit viewer
         for i, stage in enumerate(Stage, start=1):
             shortcut = QShortcut(QKeySequence(f"Ctrl+{i}"), self)
@@ -146,6 +157,7 @@ class ProjectShell(QWidget):
         slots = {
             Stage.GEOMETRY: self.geometry_stage.viewer_slot,
             Stage.MESH: self.mesh_stage.viewer_slot,
+            Stage.PHYSICS: self.physics_stage.viewer_slot,
             Stage.BOUNDARIES: self.boundaries_stage.viewer_slot,
             Stage.RESULTS: self.results_stage.viewer_slot,
         }
@@ -175,6 +187,34 @@ class ProjectShell(QWidget):
                                               fs.water_column_max)
             else:
                 self.viewer.hide_water_column()
+
+    # ---------------------------------------------------------- live previews
+
+    def _preview_domain(self) -> None:
+        """Domain box follows the Background form as it is edited."""
+        with contextlib.suppress(Exception):
+            background = self.mesh_stage.background
+            self.viewer.show_domain_box(background.bounds_min.value(),
+                                        background.bounds_max.value())
+            self.viewer.plotter.render()
+
+    def _preview_snappy(self) -> None:
+        """Region/material-point overlays follow the Refinement tab live."""
+        with contextlib.suppress(Exception):
+            self.mesh_stage.snappy.collect_into_model()
+            self._refresh_viewer()
+            self.viewer.plotter.render()
+
+    def _preview_column(self) -> None:
+        """Water-init volume follows the Physics form live (free surface)."""
+        with contextlib.suppress(Exception):
+            physics = self.physics_stage
+            if physics.free_surface_chk.isChecked():
+                self.viewer.show_water_column(physics.column_min.value(),
+                                              physics.column_max.value())
+            else:
+                self.viewer.hide_water_column()
+            self.viewer.plotter.render()
 
     def _color_patches(self) -> None:
         """BC stage viewer: meshed patches colored by assignment (§4.5/§6.1)."""

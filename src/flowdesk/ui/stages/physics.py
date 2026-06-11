@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
@@ -48,14 +49,23 @@ class PhysicsStage(QWidget):
         self.session = session
         physics = session.model.physics
 
+        # Viewer-dominant layout: the 3D canvas stays visible while editing
+        # spatial inputs (the free-surface water column is a spatial object)
         outer = QHBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        self.viewer_slot = QVBoxLayout()
+        outer.addLayout(self.viewer_slot, stretch=1)
+
         panel = QWidget()
-        panel.setMaximumWidth(560)
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(PANEL_PADDING * 2, PANEL_PADDING, PANEL_PADDING, PANEL_PADDING)
+        layout.setContentsMargins(PANEL_PADDING, PANEL_PADDING, PANEL_PADDING,
+                                  PANEL_PADDING)
         layout.setSpacing(GROUP_GAP // 2)
-        outer.addWidget(panel)
-        outer.addStretch()
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(panel)
+        scroll.setFixedWidth(520)
+        outer.addWidget(scroll)
 
         title = QLabel("Physics")
         title.setProperty("role", "title")
