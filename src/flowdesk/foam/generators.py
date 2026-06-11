@@ -267,11 +267,11 @@ def control_dict(model: CaseModel) -> str:
             "",
             entry("writeControl", "adjustableRunTime"),
             entry("writeInterval", t.output_interval),
-            entry("purgeWrite", 0),
+            entry("purgeWrite", model.run.purge_write_transient),
         ]
     lines += [
-        entry("writeFormat", "binary"),
-        entry("writePrecision", 7),
+        entry("writeFormat", model.run.write_format),
+        entry("writePrecision", model.run.write_precision),
         entry("timeFormat", "general"),
         entry("runTimeModifiable", True),
         "",

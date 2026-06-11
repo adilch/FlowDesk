@@ -72,6 +72,7 @@ def patch_color(bc: PhysicalBC | None) -> str | None:
 
 class BoundariesStage(QWidget):
     model_changed = pyqtSignal(Stage)
+    selection_changed = pyqtSignal(set)  # patch names selected in the list
 
     def __init__(self, session: ProjectSession, parent: QWidget | None = None):
         super().__init__(parent)
@@ -296,6 +297,7 @@ class BoundariesStage(QWidget):
 
     def _on_selection(self) -> None:
         patches = self._selected_patches()
+        self.selection_changed.emit(set(patches))  # viewer highlight (§4.5)
         if len(patches) != 1:
             return
         bc = self.session.model.boundaries.get(patches[0])

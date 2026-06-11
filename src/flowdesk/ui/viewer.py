@@ -122,17 +122,39 @@ class ViewerWidget(QWidget):
         except Exception:
             return False
         self.plotter.clear()
+        self._patch_actors = {}
         patch_names = boundaries.keys()  # MultiBlock: .keys() is the only name API
         for name in patch_names:
             patch = boundaries[name]
             color = assignments.get(name) or COLORS["warn"]
-            self.plotter.add_mesh(
+            actor = self.plotter.add_mesh(
                 patch, name=f"_patch_{name}", color=color,
                 opacity=1.0 if assignments.get(name) else 0.85,
                 show_edges=False, smooth_shading=False,
             )
+            self._patch_actors[name] = (actor, color)
         self.plotter.reset_camera()
         return True
+
+    def highlight_patches(self, selected: set[str]) -> None:
+        """BC stage (§4.5): selected patches pop, the rest fade. Empty selection
+        restores everyone. No-op when no patches are loaded."""
+        actors = getattr(self, "_patch_actors", {})
+        for name, (actor, _base) in actors.items():
+            prop = actor.GetProperty()
+            if not selected:
+                prop.SetOpacity(1.0)
+                actor.SetVisibility(True)
+                prop.EdgeVisibilityOff()
+            elif name in selected:
+                prop.SetOpacity(1.0)
+                prop.EdgeVisibilityOn()
+                prop.SetEdgeColor(1.0, 1.0, 1.0)
+                prop.SetLineWidth(2)
+            else:
+                prop.SetOpacity(0.18)
+                prop.EdgeVisibilityOff()
+        self.plotter.render()
 
     def load_openfoam_mesh(self, case_dir: Path) -> int | None:
         """Mesh preview (§4.3.3): surface-with-edges of the current polyMesh.

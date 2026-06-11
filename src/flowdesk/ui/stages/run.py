@@ -9,6 +9,7 @@ import pyqtgraph as pg
 from PyQt6.QtCore import QTimer, pyqtSignal
 from PyQt6.QtWidgets import (
     QComboBox,
+    QDoubleSpinBox,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -124,6 +125,55 @@ class RunStage(QWidget):
         grid.addWidget(self.max_iter, 3, 1)
         form.addLayout(grid)
 
+        # --- Write controls (controlDict, §4.7) ---
+        write_title = QLabel("WRITE CONTROLS (controlDict)")
+        write_title.setProperty("role", "section")
+        form.addWidget(write_title)
+        wgrid = QGridLayout()
+        steady = session.model.physics.is_steady
+        self.write_every_label = QLabel(
+            "Write every (iterations)" if steady else "Write every (seconds)")
+        wgrid.addWidget(self.write_every_label, 0, 0)
+        self.write_interval = QDoubleSpinBox()
+        self.write_interval.setDecimals(0 if steady else 4)
+        self.write_interval.setRange(1e-6, 1_000_000)
+        self.write_interval.setValue(
+            run_model.write_interval_steady if steady
+            else session.model.physics.time.output_interval)
+        self.write_interval.setToolTip(
+            "OpenFOAM keyword: writeInterval (writeControl timeStep for steady, "
+            "adjustableRunTime for transient)")
+        wgrid.addWidget(self.write_interval, 0, 1)
+
+        wgrid.addWidget(QLabel("Keep last N writes (0 = all)"), 1, 0)
+        self.purge = QSpinBox()
+        self.purge.setRange(0, 1000)
+        self.purge.setValue(run_model.purge_write if steady
+                            else run_model.purge_write_transient)
+        self.purge.setToolTip("OpenFOAM keyword: purgeWrite — 0 keeps every "
+                              "written time directory")
+        wgrid.addWidget(self.purge, 1, 1)
+
+        wgrid.addWidget(QLabel("Write format"), 2, 0)
+        self.write_format = QComboBox()
+        self.write_format.addItems(["binary", "ascii"])
+        self.write_format.setCurrentText(run_model.write_format)
+        wgrid.addWidget(self.write_format, 2, 1)
+
+        wgrid.addWidget(QLabel("Write precision"), 3, 0)
+        self.write_precision = QSpinBox()
+        self.write_precision.setRange(6, 15)
+        self.write_precision.setValue(run_model.write_precision)
+        wgrid.addWidget(self.write_precision, 3, 1)
+        form.addLayout(wgrid)
+
+        self.disk_estimate = QLabel("")
+        self.disk_estimate.setProperty("role", "caption")
+        form.addWidget(self.disk_estimate)
+        for w in (self.write_interval, self.purge, self.max_iter):
+            w.valueChanged.connect(lambda _v: self._update_disk_estimate())
+        self._update_disk_estimate()
+
         self.run_btn = make_button("Run", "primary")
         self.run_btn.clicked.connect(self.start_run)
         self.stop_btn = make_button("Stop", "secondary")
@@ -162,6 +212,36 @@ class RunStage(QWidget):
         run_model.cores = self.cores.value()
         run_model.decomposition = self.decomp.currentText()
         run_model.max_iterations = self.max_iter.value()
+        # write controls -> the right home per time treatment
+        if self.session.model.physics.is_steady:
+            run_model.write_interval_steady = int(self.write_interval.value())
+            run_model.purge_write = self.purge.value()
+        else:
+            self.session.model.physics.time.output_interval = \
+                self.write_interval.value()
+            run_model.purge_write_transient = self.purge.value()
+        run_model.write_format = self.write_format.currentText()
+        run_model.write_precision = self.write_precision.value()
+
+    def _update_disk_estimate(self) -> None:
+        """§4.7: rough projected disk use; warn above 20 GB."""
+        result = self.session.model.mesh.result
+        if result is None or result.cell_count == 0:
+            self.disk_estimate.setText("")
+            return
+        if self.session.model.physics.is_steady:
+            n_writes = max(1, int(self.max_iter.value()
+                                  / max(1.0, self.write_interval.value())))
+        else:
+            end = self.session.model.physics.time.end_time
+            n_writes = max(1, int(end / max(1e-9, self.write_interval.value())))
+        if self.purge.value() > 0:
+            n_writes = min(n_writes, self.purge.value())
+        n_fields = 6  # U(3) + p + turb pair, order of magnitude
+        gb = result.cell_count * n_fields * 8 * n_writes / 1e9
+        warn = "  ⚠ consider purging" if gb > 20 else ""
+        self.disk_estimate.setText(
+            f"≈ {n_writes} write(s) ≈ {gb:.2f} GB on disk{warn}")
 
     def start_run(self) -> None:
         self._clear_banners()

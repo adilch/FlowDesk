@@ -115,7 +115,7 @@ class RunMode(Enum):
 
 
 class RunModel(BaseModel):
-    """Run stage (PRD §4.7)."""
+    """Run stage (PRD §4.7), including the user-facing controlDict write controls."""
 
     mode: RunMode = RunMode.PARALLEL
     cores: int = 4
@@ -123,4 +123,9 @@ class RunModel(BaseModel):
     hierarchical_n: tuple[int, int, int] = (2, 2, 1)
     max_iterations: int = 2000  # steady end criterion
     write_interval_steady: int = 200
+    # keep-last-N writes; 0 = keep everything. Steady defaults to last 2
+    # (intermediate iterations are rarely wanted); transient keeps all frames.
     purge_write: int = 2
+    purge_write_transient: int = 0
+    write_format: Literal["ascii", "binary"] = "binary"
+    write_precision: int = 7

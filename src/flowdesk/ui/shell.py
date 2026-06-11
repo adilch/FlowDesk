@@ -98,6 +98,8 @@ class ProjectShell(QWidget):
         self.physics_stage.model_changed.connect(
             lambda _s: self.boundaries_stage.refresh())
         self.mesh_stage.mesh_completed.connect(self._on_mesh_completed)
+        self.boundaries_stage.selection_changed.connect(
+            self.viewer.highlight_patches)
         self.run_stage.run_finished.connect(lambda _ok: self._refresh_status())
 
         # Keyboard (§5.2): Ctrl+1..7 stages, Ctrl+S save, Ctrl+R run, F fit viewer
