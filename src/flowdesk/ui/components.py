@@ -222,12 +222,16 @@ class Banner(QFrame):
     def __init__(self, message: str, severity: str = "info", parent: QWidget | None = None):
         super().__init__(parent)
         self.setProperty("banner", severity)
+        self.severity = severity
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 8, 12, 8)
         icon = {"info": "ℹ", "warn": "⚠", "error": "❌"}[severity]
-        label = QLabel(f"{icon}  {message}")
-        label.setWordWrap(True)
-        layout.addWidget(label)
+        self._label = QLabel(f"{icon}  {message}")
+        self._label.setWordWrap(True)
+        layout.addWidget(self._label)
+
+    def text(self) -> str:
+        return self._label.text()
 
 
 # --- Traffic-light metric row (checkMesh quality report, §4.3.3) -----------------------

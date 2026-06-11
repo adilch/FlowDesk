@@ -25,6 +25,7 @@ dev = [
 [project.scripts]
 flowdesk = "flowdesk.ui.main:main"
 flowdesk-gallery = "flowdesk.ui.gallery:main"
+flowdesk-files = "flowdesk.ui.file_browser:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -46,5 +47,5 @@ src = ["src", "tests"]
 select = ["E", "F", "W", "I", "N", "UP", "B", "SIM"]
 
 [tool.ruff.lint.per-file-ignores]
-# Qt signal/slot names follow Qt's camelCase convention
-"src/flowdesk/ui/**" = ["N815"]
+# Qt signal/slot and virtual-method names follow Qt's camelCase convention
+"src/flowdesk/ui/**" = ["N815", "N802"]

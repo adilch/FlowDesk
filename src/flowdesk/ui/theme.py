@@ -31,6 +31,16 @@ COLORS = {
     "viewport-bottom": "#1A1E24",
 }
 
+# OpenFOAM dictionary syntax highlighting (file editor, §4.9) - part of the one theme
+SYNTAX_COLORS = {
+    "comment": "#6A7A89",
+    "keyword": "#3D9BE9",  # FoamFile, dictionary structure words
+    "number": "#B5CEA8",
+    "string": "#CE9178",
+    "dimension": "#8B6FE8",  # [0 1 -1 0 0 0 0]
+    "directive": "#E0A93E",  # #include, #eval, $macro
+}
+
 # Patch-assignment categorical palette (color-blind-safe, Okabe-Ito; PRD §6.1)
 PATCH_COLORS = {
     "inlet": "#0072B2",
