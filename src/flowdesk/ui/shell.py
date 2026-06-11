@@ -101,6 +101,7 @@ class ProjectShell(QWidget):
         # and every blockMesh/snappy line stream into the log live
         self.mesh_stage.mesh_started.connect(self.drawer.attach)
         self.mesh_stage.mesh_completed.connect(self._on_mesh_completed)
+        self.geometry_stage.visibility_toggled.connect(self.viewer.set_surface_visible)
         self.boundaries_stage.selection_changed.connect(
             self.viewer.highlight_patches)
         self.run_stage.run_finished.connect(lambda _ok: self._refresh_status())
@@ -174,11 +175,16 @@ class ProjectShell(QWidget):
         model = self.session.model
         block = model.mesh.block
         with contextlib.suppress(Exception):
+            # full rebuild so deleted geometry/regions don't linger as actors
+            self.viewer.plotter.clear()
             self.viewer.show_domain_box(block.bounds_min, block.bounds_max)
+            hidden = self.geometry_stage.hidden_surfaces()
             for surface in model.geometry.surfaces:
                 stl = self.session.case_dir / "constant" / "triSurface" / f"{surface.name}.stl"
                 if stl.exists():
                     self.viewer.load_surface(stl, name=surface.name)
+                    if surface.name in hidden:
+                        self.viewer.set_surface_visible(surface.name, False)
             for region in model.mesh.snappy.regions:
                 self.viewer.show_region_overlay(region.name, region.geometry)
             if model.mesh.snappy.location_in_mesh is not None:
@@ -240,6 +246,9 @@ class ProjectShell(QWidget):
     def _on_model_changed(self, _stage: Stage) -> None:
         self._connect_supervisor_log()
         self._refresh_status()
+        # reflect geometry add/delete/edit in the canvas immediately
+        if self._stack.currentWidget() is self.geometry_stage:
+            self._refresh_viewer()
 
     def request_close(self) -> None:
         """Close the project (§5.2: confirm if running). The detached solver

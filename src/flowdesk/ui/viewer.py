@@ -208,6 +208,14 @@ class ViewerWidget(QWidget):
         self.plotter.close()
         super().closeEvent(event)
 
+    def set_surface_visible(self, name: str, visible: bool) -> None:
+        """Toggle a loaded surface actor without reloading (§4.2 per-surface
+        visibility). No-op if the surface is not currently shown."""
+        actor = self.plotter.renderer.actors.get(name)
+        if actor is not None:
+            actor.SetVisibility(visible)
+            self.plotter.render()
+
     def fit(self) -> None:
         self.plotter.reset_camera()
 
