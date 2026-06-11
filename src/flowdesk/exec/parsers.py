@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from flowdesk.model.mesh import PatchInfo, QualityReport
+from flowdesk.model.mesh import LayerCoverage, PatchInfo, QualityReport
 
 # §4.3.3 thresholds: (pass below, warn below; above = fail)
 THRESHOLDS = {
@@ -63,6 +63,50 @@ def verdict(metric: str, value: float | None) -> str:
     if value <= warn:
         return "warn"
     return "fail"
+
+
+class SnappyLayerParser:
+    """Parses snappy's layer summary table (§4.3.3 layer coverage). Observed
+    v2506 format (thicknesses in metres):
+
+        patch faces    layers avg thickness[m]
+                             near-wall overall
+        ----- -----    ------ --------- -------
+        weir 1864     2      0.00545   0.012
+    """
+
+    _ROW = re.compile(
+        r"^\s*(\w+)\s+(\d+)\s+([\d.eE+-]+)\s+([\d.eE+-]+)\s+([\d.eE+-]+)\s*$")
+
+    def __init__(self) -> None:
+        # Upsert keyed by surface: snappy prints the table more than once
+        # (specification pass, then the post-addition summary) - last wins.
+        self._by_surface: dict[str, LayerCoverage] = {}
+        self._in_table = False
+
+    @property
+    def coverage(self) -> list[LayerCoverage]:
+        return list(self._by_surface.values())
+
+    def feed(self, line: str) -> None:
+        if re.match(r"^\s*patch\s+faces\s+layers", line):
+            self._in_table = True
+            return
+        if not self._in_table:
+            return
+        if re.match(r"^\s*-+\s", line) or "near-wall" in line or "[m]" in line:
+            return
+        m = self._ROW.match(line)
+        if m:
+            self._by_surface[m.group(1)] = LayerCoverage(
+                surface=m.group(1),
+                n_faces=int(m.group(2)),
+                layers_achieved=float(m.group(3)),
+                thickness_near_wall=float(m.group(4)),
+                thickness_overall=float(m.group(5)),
+            )
+        elif line.strip():  # first non-matching, non-blank line ends the table
+            self._in_table = False
 
 
 def read_boundary_patches(case_dir: Path) -> list[PatchInfo]:

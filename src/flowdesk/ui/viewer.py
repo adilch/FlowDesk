@@ -53,6 +53,63 @@ class ViewerWidget(QWidget):
         self.plotter.reset_camera()
         return mesh
 
+    def show_region_overlay(self, name: str, geometry) -> None:
+        """Translucent refinement-region overlay (§4.3.2): box/sphere/cylinder."""
+        from flowdesk.model.mesh import BoxRegion, CylinderRegion, SphereRegion
+
+        if isinstance(geometry, BoxRegion):
+            (x0, y0, z0), (x1, y1, z1) = geometry.min, geometry.max
+            shape = pv.Box(bounds=(x0, x1, y0, y1, z0, z1))
+        elif isinstance(geometry, SphereRegion):
+            shape = pv.Sphere(center=geometry.centre, radius=geometry.radius)
+        elif isinstance(geometry, CylinderRegion):
+            p1, p2 = geometry.point1, geometry.point2
+            center = tuple((a + b) / 2 for a, b in zip(p1, p2, strict=True))
+            direction = tuple(b - a for a, b in zip(p1, p2, strict=True))
+            height = sum(d * d for d in direction) ** 0.5
+            shape = pv.Cylinder(center=center, direction=direction,
+                                radius=geometry.radius, height=height)
+        else:
+            return
+        self.plotter.add_mesh(shape, name=f"_region_{name}", color=COLORS["run"],
+                              opacity=0.25)
+
+    def clear_region_overlays(self, names: list[str]) -> None:
+        for name in names:
+            self.plotter.remove_actor(f"_region_{name}")
+
+    def show_location_marker(self, point) -> None:
+        """The locationInMesh material point, rendered as a marker (§4.3.2)."""
+        marker = pv.Sphere(center=point, radius=self._marker_radius())
+        self.plotter.add_mesh(marker, name="_location_marker", color=COLORS["warn"])
+
+    def _marker_radius(self) -> float:
+        bounds = self.plotter.bounds
+        diag = ((bounds[1] - bounds[0]) ** 2 + (bounds[3] - bounds[2]) ** 2
+                + (bounds[5] - bounds[4]) ** 2) ** 0.5
+        return max(diag / 150.0, 1e-6)
+
+    def load_openfoam_mesh(self, case_dir: Path) -> int | None:
+        """Mesh preview (§4.3.3): surface-with-edges of the current polyMesh.
+
+        Returns the cell count, or None when the reader can't load it
+        (preview is best-effort; the quality report is authoritative)."""
+        foam_file = case_dir / "case.foam"
+        try:
+            foam_file.touch()
+            reader = pv.OpenFOAMReader(str(foam_file))
+            data = reader.read()
+            internal = data["internalMesh"]
+            surface = internal.extract_surface()
+            self.plotter.remove_actor("_domain_box")
+            self.plotter.add_mesh(surface, name="_mesh_preview",
+                                  color=COLORS["text-2"], show_edges=True,
+                                  edge_color=COLORS["border"])
+            self.plotter.reset_camera()
+            return internal.n_cells
+        except Exception:
+            return None
+
     def show_domain_box(self, bounds_min, bounds_max) -> None:
         """Wireframe outline of the blockMesh background box (§4.3.1)."""
         (x0, y0, z0), (x1, y1, z1) = bounds_min, bounds_max

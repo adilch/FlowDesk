@@ -113,6 +113,19 @@ class PatchInfo(BaseModel):
     n_faces: int = 0
 
 
+class LayerCoverage(BaseModel):
+    """One row of snappy's layer summary table (§4.3.3: warn < 70% of requested).
+
+    v2506 reports thickness in metres (near-wall / overall columns); coverage
+    is judged as layers_achieved / layers_requested."""
+
+    surface: str
+    n_faces: int = 0
+    layers_achieved: float = 0.0
+    thickness_near_wall: float = 0.0  # m
+    thickness_overall: float = 0.0  # m
+
+
 class QualityReport(BaseModel):
     """Parsed checkMesh output (§4.3.3)."""
 
@@ -129,6 +142,7 @@ class MeshResult(BaseModel):
     cell_count: int = 0
     patches: list[PatchInfo] = Field(default_factory=list)
     quality: QualityReport = Field(default_factory=QualityReport)
+    layer_coverage: list[LayerCoverage] = Field(default_factory=list)
 
 
 class MeshModel(BaseModel):

@@ -48,7 +48,7 @@ def test_cavity_meshed_and_quality_reported_in_gui(qtbot, tmp_path) -> None:
     assert {p.name for p in result.patches} == {"movingWall", "fixedWalls", "frontAndBack"}
 
     # Quality panel rendered traffic lights (§4.3.3)
-    labels = [w.text() for w in stage.findChildren(type(stage.cell_estimate))]
+    labels = [w.text() for w in stage.findChildren(type(stage.background.cell_estimate))]
     joined = " ".join(labels)
     assert "400 cells" in joined
     assert "Mesh OK" in joined

@@ -172,7 +172,9 @@ def snappy_hex_mesh_dict(model: CaseModel) -> str:
         entry("nSmoothThickness", 10),
         entry("maxFaceThicknessRatio", 0.5),
         entry("maxThicknessToMedialRatio", 0.3),
-        entry("minMedianAxisAngle", 90),
+        # PRD §4.3.2 example shows the legacy spelling 'minMedianAxisAngle';
+        # OpenFOAM v2506 requires 'minMedialAxisAngle' (verified against the solver).
+        entry("minMedialAxisAngle", 90),
         entry("nBufferCellsNoExtrude", 0),
         entry("nLayerIter", 50),
     ]

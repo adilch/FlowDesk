@@ -15,6 +15,7 @@ from pathlib import Path
 from flowdesk.foam import generators
 from flowdesk.foam import ownership as own
 from flowdesk.model.case import Validated
+from flowdesk.model.findings import Stage
 from flowdesk.model.ownership import FileOwnership
 
 
@@ -29,6 +30,10 @@ def write_case(validated: Validated, case_dir: Path) -> WriteReport:
     """Write all managed files. Returns what happened, honestly."""
     model = validated.model
     generated = generators.generate_case(model)
+    if validated.scope is not None and Stage.BOUNDARIES not in validated.scope:
+        # Scoped (e.g. mesh-only) write: field files need BCs, which a scoped
+        # token does not vouch for - never write what wasn't validated.
+        generated = {p: t for p, t in generated.items() if not p.startswith("0/")}
     report = WriteReport()
 
     results = own.reconcile_all(case_dir, generated, model.ownership)

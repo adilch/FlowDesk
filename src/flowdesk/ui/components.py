@@ -159,6 +159,10 @@ class Vec3Input(QWidget):
         x, y, z = (f.value() for f in self._fields)
         return (x, y, z)
 
+    def set_values(self, values: tuple[float, float, float]) -> None:
+        for field, v in zip(self._fields, values, strict=True):
+            field.set_value(v)
+
     def _emit(self) -> None:
         self.valueChanged.emit(*self.value())
 

@@ -145,6 +145,14 @@ class CaseModel(BaseModel):
                     Severity.ERROR, Stage.MESH,
                     "Material point (locationInMesh) is not set. → Mesh → Pick or "
                     "suggest a point inside the fluid region.", "mesh.snappy.location_in_mesh"))
+            elif not all(
+                lo < c < hi for c, lo, hi in
+                zip(s.location_in_mesh, b.bounds_min, b.bounds_max, strict=True)
+            ):
+                out.append(Finding(
+                    Severity.ERROR, Stage.MESH,
+                    "Material point is outside the background-mesh box. → Mesh → "
+                    "Move it inside the domain.", "mesh.snappy.location_in_mesh"))
             refined = {r.surface for r in s.surfaces}
             for surf in self.geometry.surfaces:
                 if surf.name not in refined:
@@ -260,13 +268,18 @@ class CaseModel(BaseModel):
 
     # ----------------------------------------------------------------- gating
 
-    def validated(self) -> Validated:
-        """Return a write token, or raise InvalidCaseError listing the blocking findings."""
+    def validated(self, scope: frozenset[Stage] | None = None) -> Validated:
+        """Return a write token, or raise InvalidCaseError listing the blocking findings.
+
+        scope=None means the full case (pre-run gate). A scoped token (e.g.
+        {GEOMETRY, MESH} for mesh generation, which legally precedes BC
+        assignment in the §3.4 journey) only requires those stages to be clean,
+        and the writer correspondingly writes only the files those stages own."""
         found = self.validate_full()
-        blocking = errors(found)
+        blocking = [f for f in errors(found) if scope is None or f.stage in scope]
         if blocking:
             raise InvalidCaseError(blocking)
-        return Validated(model=self, findings=found)
+        return Validated(model=self, findings=found, scope=scope)
 
     # ------------------------------------------------------------ persistence
 
@@ -299,6 +312,9 @@ class Validated:
 
     model: CaseModel
     findings: list[Finding]
+    scope: frozenset[Stage] | None = None  # None = full case
+
+MESH_SCOPE = frozenset({Stage.GEOMETRY, Stage.MESH})
 
 
 class InvalidCaseError(Exception):

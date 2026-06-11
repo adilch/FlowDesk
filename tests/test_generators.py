@@ -127,6 +127,8 @@ def test_snappy_dict_matches_prd_example(box_model: CaseModel) -> None:
     assert "locationInMesh  (2 0 0.5);" in text
     assert "weir { nSurfaceLayers 3; }" in text
     assert "maxNonOrtho     65;" in text
+    # v2506 keyword (PRD example shows the legacy 'minMedianAxisAngle' spelling)
+    assert "minMedialAxisAngle 90;" in text
 
 
 def test_numerics_presets_differ() -> None:

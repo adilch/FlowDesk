@@ -75,8 +75,10 @@ class ProjectShell(QWidget):
         # Signals
         self.rail.stage_selected.connect(self.show_stage)
         self.geometry_stage.model_changed.connect(self._on_model_changed)
+        self.geometry_stage.model_changed.connect(
+            lambda _s: self.mesh_stage.refresh())
         self.mesh_stage.model_changed.connect(self._on_model_changed)
-        self.mesh_stage.mesh_completed.connect(lambda _ok: self._refresh_viewer())
+        self.mesh_stage.mesh_completed.connect(self._on_mesh_completed)
 
         # Keyboard: Ctrl+1..7 (§5.2)
         for i, stage in enumerate(Stage, start=1):
@@ -107,7 +109,7 @@ class ProjectShell(QWidget):
         slot.addWidget(self.viewer)
 
     def _refresh_viewer(self) -> None:
-        """Show imported surfaces + the background-mesh box outline."""
+        """Surfaces + domain box + refinement overlays + material-point marker."""
         model = self.session.model
         block = model.mesh.block
         try:
@@ -116,8 +118,21 @@ class ProjectShell(QWidget):
                 stl = self.session.case_dir / "constant" / "triSurface" / f"{surface.name}.stl"
                 if stl.exists():
                     self.viewer.load_surface(stl, name=surface.name)
+            for region in model.mesh.snappy.regions:
+                self.viewer.show_region_overlay(region.name, region.geometry)
+            if model.mesh.snappy.location_in_mesh is not None:
+                self.viewer.show_location_marker(model.mesh.snappy.location_in_mesh)
         except Exception:
             pass  # viewer is best-effort; stage content never depends on it
+
+    def _on_mesh_completed(self, ok: bool) -> None:
+        if not ok:
+            return
+        # Mesh preview (§4.3.3) - best-effort; quality report is authoritative
+        import contextlib
+
+        with contextlib.suppress(Exception):
+            self.viewer.load_openfoam_mesh(self.session.case_dir)
 
     # ------------------------------------------------------------------ status
 

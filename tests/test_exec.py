@@ -60,6 +60,33 @@ def test_checkmesh_parser_failure_line() -> None:
     assert not parser.report.mesh_ok
 
 
+def test_snappy_layer_parser() -> None:
+    from flowdesk.exec.parsers import SnappyLayerParser
+
+    # verbatim v2506 output (observed during M3 development)
+    sample = """\
+Handling cells with warped patch faces ...
+Set displacement to zero on 0 warped faces
+
+patch faces    layers avg thickness[m]
+                     near-wall overall
+----- -----    ------ --------- -------
+weir 1864     2      0.00545   0.012
+ground 1200     1.4      0.0011    0.003
+
+Outer iteration : 0
+"""
+    parser = SnappyLayerParser()
+    for line in sample.splitlines():
+        parser.feed(line)
+    assert len(parser.coverage) == 2
+    weir = parser.coverage[0]
+    assert (weir.surface, weir.n_faces) == ("weir", 1864)
+    assert weir.layers_achieved == 2
+    assert weir.thickness_overall == 0.012
+    assert parser.coverage[1].layers_achieved == 1.4
+
+
 def test_verdicts_match_prd_table() -> None:
     assert verdict("max_non_ortho", 50) == "pass"
     assert verdict("max_non_ortho", 70) == "warn"
