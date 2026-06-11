@@ -86,7 +86,8 @@ class ResultsStage(QWidget):
         self.cmap_combo.currentTextChanged.connect(lambda _t: self.render())
         grid.addWidget(self.cmap_combo, 2, 1)
         grid.addWidget(QLabel("Slice normal"), 3, 0)
-        self.normal_seg = SegmentedControl(["X", "Y", "Z"], current=2)
+        self.normal_seg = SegmentedControl(["X", "Y", "Z"],
+                                           current=self._default_normal_index())
         self.normal_seg.selectionChanged.connect(lambda _i: self.render())
         grid.addWidget(self.normal_seg, 3, 1)
         grid.addWidget(QLabel("Slice origin"), 4, 0)
@@ -149,6 +150,21 @@ class ResultsStage(QWidget):
         block = self.session.model.mesh.block
         return tuple((lo + hi) / 2 for lo, hi in
                      zip(block.bounds_min, block.bounds_max, strict=True))
+
+    def _default_normal_index(self) -> int:
+        """A default slice that actually shows the flow:
+        - quasi-2D case (an axis with <=3 cells): slice across the thin axis,
+          i.e. the 2D plane itself;
+        - free surface: a vertical cut (normal Y) through the domain - a
+          horizontal default would slice the air above the water;
+        - otherwise: Z (mid-depth horizontal cut)."""
+        cells = self.session.model.mesh.block.cells
+        thin = [i for i, c in enumerate(cells) if c <= 3]
+        if thin:
+            return thin[0]
+        if self.session.model.physics.free_surface is not None:
+            return 1
+        return 2
 
     def refresh(self) -> None:
         """Re-list times and load the latest (called on stage entry / run end)."""
@@ -226,6 +242,13 @@ class ResultsStage(QWidget):
                 normal = ["x", "y", "z"][self.normal_seg.current()]
                 sliced = results_io.slice_plane(self.results, self.origin.value(),
                                                 normal)
+                if sliced.n_cells == 0:
+                    block = self.session.model.mesh.block
+                    self._add_banner(
+                        f"The slice plane missed the mesh — nothing to show. → "
+                        f"Move the slice origin inside the domain "
+                        f"({block.bounds_min} … {block.bounds_max}).", "error")
+                    return
                 key, _ = results_io.scalar_array(sliced, field)
                 plotter.add_mesh(sliced, scalars=key, cmap=cmap,
                                  scalar_bar_args={"title": field})

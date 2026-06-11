@@ -61,6 +61,34 @@ def test_material_point_not_inside_dam(tmp_path) -> None:
     assert inside_dam is not None and "inside the solid" in inside_dam
 
 
+def test_default_slice_orientation(qtbot, tmp_path) -> None:
+    """'Why don't I see the velocities' - the default slice must cut through
+    the flow, not the air above it."""
+    from flowdesk.ui.stages.results import ResultsStage
+    from flowdesk.ui.viewer import ViewerWidget
+
+    viewer = ViewerWidget()
+    qtbot.addWidget(viewer)
+
+    # free surface, no thin axis: vertical cut (Y) through the breach
+    breach = projects.create_project("b", tmp_path, "Dam break (3D breach)")
+    stage = ResultsStage(breach, viewer)
+    qtbot.addWidget(stage)
+    assert stage.normal_seg.current() == 1
+
+    # quasi-2D column (1 cell in y): the 2D plane itself
+    column = projects.create_project("c", tmp_path, "Dam break (2D column)")
+    stage2 = ResultsStage(column, viewer)
+    qtbot.addWidget(stage2)
+    assert stage2.normal_seg.current() == 1
+
+    # single-phase 3D (weir): unchanged mid-depth Z cut
+    weir = projects.create_project("w", tmp_path, "Flow over a weir")
+    stage3 = ResultsStage(weir, viewer)
+    qtbot.addWidget(stage3)
+    assert stage3.normal_seg.current() == 2
+
+
 @requires_openfoam
 def test_breach_flow_end_to_end(qtbot, tmp_path) -> None:
     """Shortened run: water must pour through the breach, not through the dam."""
