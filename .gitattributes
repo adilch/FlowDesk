@@ -1,0 +1,5 @@
+# Force LF everywhere: golden-file tests (NFR §9 determinism) compare bytes,
+# and OpenFOAM dictionaries are LF-terminated. No CRLF may enter the repo.
+* text=auto eol=lf
+*.png binary
+*.stl binary
