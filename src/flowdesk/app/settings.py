@@ -58,3 +58,6 @@ class AppSettings:
         self.recent = [r for r in self.recent if r.path != entry.path]
         self.recent.insert(0, entry)
         del self.recent[MAX_RECENT:]
+
+    def remove_recent(self, path: str) -> None:
+        self.recent = [r for r in self.recent if r.path != path]

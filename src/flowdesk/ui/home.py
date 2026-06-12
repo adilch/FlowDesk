@@ -4,16 +4,20 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import QSize, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
     QFormLayout,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QMenu,
     QVBoxLayout,
     QWidget,
 )
@@ -23,7 +27,88 @@ from flowdesk.app.settings import AppSettings
 from flowdesk.app.templates import TEMPLATES
 from flowdesk.platform.commands import Environment, default_projects_dir, is_slow_location
 from flowdesk.ui.components import Banner, make_button
-from flowdesk.ui.theme import GROUP_GAP, PANEL_PADDING
+from flowdesk.ui.icons import icon
+from flowdesk.ui.theme import COLORS, GROUP_GAP, PANEL_PADDING
+
+
+def _relative_time(iso: str) -> str:
+    """'2h ago' / 'yesterday' / '3d ago' from an ISO timestamp."""
+    from datetime import UTC, datetime
+
+    if not iso:
+        return ""
+    try:
+        when = datetime.fromisoformat(iso)
+    except ValueError:
+        return ""
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=UTC)
+    delta = datetime.now(UTC) - when
+    secs = int(delta.total_seconds())
+    if secs < 90:
+        return "just now"
+    if secs < 3600:
+        return f"{secs // 60}m ago"
+    if secs < 86400:
+        return f"{secs // 3600}h ago"
+    if secs < 172800:
+        return "yesterday"
+    return f"{secs // 86400}d ago"
+
+
+_SOLVER_ICON = {"interFoam": "physics", "pimpleFoam": "physics",
+                "simpleFoam": "geometry"}
+
+
+def _reveal(path: str) -> None:
+    """Open the project folder in the OS file manager."""
+    import subprocess
+    import sys
+
+    p = Path(path)
+    try:
+        if sys.platform == "win32":
+            subprocess.Popen(["explorer", str(p)])
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", str(p)])
+        else:
+            subprocess.Popen(["xdg-open", str(p)])
+    except OSError:
+        pass
+
+
+class _RecentRow(QWidget):
+    """A compact two-line recent-project row: name + solver/cells/age meta."""
+
+    def __init__(self, entry, exists: bool, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setProperty("recentRow", "true")
+        row = QHBoxLayout(self)
+        row.setContentsMargins(8, 4, 8, 4)
+        row.setSpacing(8)
+
+        ic = QLabel()
+        ic.setPixmap(icon(_SOLVER_ICON.get(entry.solver, "geometry"),
+                          COLORS["text-2"], 18).pixmap(18, 18))
+        row.addWidget(ic)
+
+        col = QVBoxLayout()
+        col.setContentsMargins(0, 0, 0, 0)
+        col.setSpacing(0)
+        name = QLabel(entry.name)
+        meta_bits = [b for b in (
+            entry.solver,
+            f"{entry.cell_count // 1000}k cells" if entry.cell_count >= 1000
+            else (f"{entry.cell_count} cells" if entry.cell_count else ""),
+            _relative_time(entry.last_opened)) if b]
+        meta = QLabel("  ·  ".join(meta_bits) if exists else "missing — locate")
+        meta.setProperty("role", "caption")
+        col.addWidget(name)
+        col.addWidget(meta)
+        row.addLayout(col, stretch=1)
+        self.setToolTip(entry.path)
+        if not exists:
+            self.setEnabled(False)
 
 
 class NewProjectDialog(QDialog):
@@ -159,77 +244,153 @@ class HomeScreen(QWidget):
         self.env = env
         self.settings = settings
 
-        layout = QVBoxLayout(self)
-        margin = PANEL_PADDING * 3
-        layout.setContentsMargins(margin, margin, margin, margin)
-        layout.setSpacing(GROUP_GAP)
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        outer.addWidget(self._build_recent_panel())
+        outer.addWidget(self._build_welcome(), stretch=1)
+        self.refresh_recent()
+
+    # ------------------------------------------------------------------ left
+
+    def _build_recent_panel(self) -> QWidget:
+        panel = QFrame()
+        panel.setProperty("panel", "true")
+        panel.setFixedWidth(280)
+        col = QVBoxLayout(panel)
+        col.setContentsMargins(12, 16, 12, 16)
+        col.setSpacing(8)
+
+        header = QLabel("RECENT PROJECTS")
+        header.setProperty("role", "section")
+        col.addWidget(header)
+
+        self.filter_edit = QLineEdit()
+        self.filter_edit.setPlaceholderText("Filter…")
+        self.filter_edit.textChanged.connect(self._apply_filter)
+        col.addWidget(self.filter_edit)
+
+        self.recent_list = QListWidget()
+        self.recent_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.recent_list.customContextMenuRequested.connect(self._recent_menu)
+        self.recent_list.itemActivated.connect(self._open_item)
+        self.recent_list.itemClicked.connect(self._open_item)
+        col.addWidget(self.recent_list, stretch=1)
+        self._empty_note = QLabel("No recent projects yet.")
+        self._empty_note.setProperty("role", "caption")
+        self._empty_note.setWordWrap(True)
+        col.addWidget(self._empty_note)
+        return panel
+
+    def refresh_recent(self) -> None:
+        self.recent_list.clear()
+        self._empty_note.setVisible(not self.settings.recent)
+        for entry in self.settings.recent:
+            exists = Path(entry.path).exists()
+            item = QListWidgetItem()
+            item.setData(Qt.ItemDataRole.UserRole, entry.path)
+            item.setSizeHint(QSize(0, 46))
+            self.recent_list.addItem(item)
+            self.recent_list.setItemWidget(item, _RecentRow(entry, exists))
+        self._apply_filter(self.filter_edit.text())
+
+    def _apply_filter(self, text: str) -> None:
+        needle = text.strip().lower()
+        for i in range(self.recent_list.count()):
+            item = self.recent_list.item(i)
+            path = item.data(Qt.ItemDataRole.UserRole)
+            entry = next((r for r in self.settings.recent if r.path == path), None)
+            visible = (not needle) or (entry is not None
+                                       and needle in entry.name.lower())
+            item.setHidden(not visible)
+
+    def _open_item(self, item: QListWidgetItem) -> None:
+        path = item.data(Qt.ItemDataRole.UserRole)
+        if path and Path(path).exists():
+            self.open_requested.emit(Path(path))
+
+    def _recent_menu(self, pos) -> None:
+        item = self.recent_list.itemAt(pos)
+        if item is None:
+            return
+        path = item.data(Qt.ItemDataRole.UserRole)
+        menu = QMenu(self)
+        if Path(path).exists():
+            menu.addAction("Open", lambda: self.open_requested.emit(Path(path)))
+            menu.addAction("Reveal in file manager", lambda: _reveal(path))
+        menu.addAction("Remove from recent", lambda: self._remove_recent(path))
+        menu.exec(self.recent_list.mapToGlobal(pos))
+
+    def _remove_recent(self, path: str) -> None:
+        self.settings.remove_recent(path)
+        self.settings.save()
+        self.refresh_recent()
+
+    # ------------------------------------------------------------------ right
+
+    def _build_welcome(self) -> QWidget:
+        wrap = QWidget()
+        v = QVBoxLayout(wrap)
+        margin = PANEL_PADDING * 2
+        v.setContentsMargins(margin, margin, margin, margin)
+        v.setSpacing(GROUP_GAP // 2)
+        v.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        v.addStretch()
 
         title = QLabel("FlowDesk")
         title.setProperty("role", "title")
-        layout.addWidget(title)
+        title.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        tagline = QLabel("Set up, run and post-process OpenFOAM — no limits.")
+        tagline.setProperty("role", "caption")
+        tagline.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        v.addWidget(title)
+        v.addWidget(tagline)
 
-        # Environment status strip (§4.1): say nothing when green
-        if not env.available:
-            layout.addWidget(Banner(
-                f"FlowDesk needs OpenFOAM. {env.detail} — fix this once and "
-                "everything else works.", "warn"))
+        if not self.env.available:
+            v.addWidget(Banner(
+                f"FlowDesk needs OpenFOAM. {self.env.detail} — fix this once.",
+                "warn"))
         else:
-            status = QLabel(f"✔ {env.detail}")
-            status.setProperty("role", "caption")
-            layout.addWidget(status)
+            status = QLabel(f"✔ {self.env.detail}")
+            status.setProperty("role", "status-ok")
+            status.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+            v.addWidget(status)
 
         actions = QHBoxLayout()
-        new_btn = make_button("New Project…", "primary")
+        actions.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        new_btn = make_button("New project…", "primary")
+        new_btn.setIcon(icon("plus", "#FFFFFF", 18))
         new_btn.clicked.connect(self._new_dialog)
-        open_btn = make_button("Open Project…")
+        open_btn = make_button("Open…")
+        open_btn.setIcon(icon("folder", COLORS["text-1"], 18))
         open_btn.clicked.connect(self._open_dialog)
-        settings_btn = make_button("Environment…", "ghost")
-        settings_btn.clicked.connect(self._environment_dialog)
+        env_btn = make_button("Environment…", "ghost")
+        env_btn.clicked.connect(self._environment_dialog)
         actions.addWidget(new_btn)
         actions.addWidget(open_btn)
-        actions.addWidget(settings_btn)
-        actions.addStretch()
-        layout.addLayout(actions)
+        actions.addWidget(env_btn)
+        v.addLayout(actions)
 
-        # §5.3: 'Try the cavity tutorial' card - the only onboarding
-        if not settings.coach_done:
+        if not self.settings.coach_done:
             tutorial = make_button("▶ Try the cavity tutorial (2 min)", "ghost")
             tutorial.clicked.connect(self._start_tutorial)
-            layout.addWidget(tutorial)
+            v.addWidget(tutorial, alignment=Qt.AlignmentFlag.AlignHCenter)
 
-        recent_title = QLabel("RECENT")
-        recent_title.setProperty("role", "section")
-        layout.addWidget(recent_title)
-        self._recent_box = QVBoxLayout()
-        layout.addLayout(self._recent_box)
-        layout.addStretch()
-        self.refresh_recent()
-
-    def refresh_recent(self) -> None:
-        while self._recent_box.count():
-            item = self._recent_box.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-        if not self.settings.recent:
-            note = QLabel("No recent projects. Start with the lid-driven cavity "
-                          "template — it doubles as an environment check.")
-            note.setProperty("role", "caption")
-            self._recent_box.addWidget(note)
-            return
-        for entry in self.settings.recent:
-            exists = Path(entry.path).exists()
-            label = entry.name + (f" — {entry.solver}" if entry.solver else "")
-            if entry.cell_count:
-                label += f" — {entry.cell_count:,} cells"
-            btn = make_button(label, "ghost")
-            btn.setToolTip(entry.path)
-            if exists:
-                btn.clicked.connect(
-                    lambda _=False, p=entry.path: self.open_requested.emit(Path(p)))
-            else:
-                btn.setEnabled(False)
-                btn.setText(label + "  (missing — locate via Open Project)")
-            self._recent_box.addWidget(btn)
+        quick_title = QLabel("START FROM A TEMPLATE")
+        quick_title.setProperty("role", "section")
+        quick_title.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        v.addWidget(quick_title)
+        grid = QHBoxLayout()
+        grid.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        for tmpl in ("Lid-driven cavity", "Dam break (3D breach)",
+                     "Flow over a weir", "Vortex shedding (transient)"):
+            if tmpl in TEMPLATES:
+                b = make_button(tmpl.split(" (")[0])
+                b.clicked.connect(lambda _=False, t=tmpl: self._quick_create(t))
+                grid.addWidget(b)
+        v.addLayout(grid)
+        v.addStretch()
+        return wrap
 
     def _new_dialog(self) -> None:
         dialog = NewProjectDialog(self.env, self.settings, self)
@@ -250,9 +411,13 @@ class HomeScreen(QWidget):
         EnvironmentDialog(self.env, self).exec()
 
     def _start_tutorial(self) -> None:
+        self._quick_create("Lid-driven cavity", prefix="cavity-tutorial")
+
+    def _quick_create(self, template: str, prefix: str = "") -> None:
         from datetime import datetime
 
-        name = f"cavity-tutorial-{datetime.now().strftime('%H%M%S')}"
+        slug = prefix or template.split(" (")[0].lower().replace(" ", "-")
+        name = f"{slug}-{datetime.now().strftime('%H%M%S')}"
         location = Path(self.settings.last_location or
                         str(default_projects_dir(self.env)))
-        self.create_requested.emit(name, location, "Lid-driven cavity")
+        self.create_requested.emit(name, location, template)

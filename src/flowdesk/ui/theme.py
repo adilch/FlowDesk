@@ -380,6 +380,9 @@ QTabBar::tab:hover {{ color: {c["text-1"]}; }}
 QTabBar::tab:selected {{ color: {c["text-1"]}; border-bottom: 2px solid {c["accent"]}; }}
 QTabWidget::pane {{ border: none; }}
 
+/* ---- Recent-project rows (transparent so list selection shows through) ---- */
+QWidget[recentRow="true"] {{ background: transparent; }}
+
 /* ---- Splitter handles (resizable panels) ---- */
 QSplitter::handle {{ background-color: {c["bg-1"]}; }}
 QSplitter::handle:horizontal {{ width: 6px; border-left: 1px solid {c["border"]}; }}
