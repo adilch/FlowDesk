@@ -79,7 +79,7 @@ def test_full_fifteen_minute_journey(qtbot, tmp_path) -> None:
     qtbot.addWidget(bcs)
     _select_patches(bcs, {"xMin"})
     bcs.type_combo.setCurrentText("Velocity inlet")
-    bcs.inlet_mode._group.button(0).setChecked(True)  # normal speed
+    bcs.inlet_spec.setCurrentIndex(bcs.inlet_spec.findData("normal"))
     bcs.inlet_speed.set_value(2.0)
     bcs.assign()
     _select_patches(bcs, {"xMax"})

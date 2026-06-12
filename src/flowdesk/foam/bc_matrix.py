@@ -11,6 +11,7 @@ from flowdesk.foam.emitter import entry, fmt
 from flowdesk.model.boundaries import (
     Atmosphere,
     Empty,
+    FieldOverride,
     Outflow,
     PhysicalBC,
     PressureOutlet,
@@ -65,6 +66,40 @@ def resolve_inlet_vector(model: CaseModel, patch: str, bc: VelocityInlet) -> Vec
     )
 
 
+def inlet_reference_speed(model: CaseModel, patch: str, bc: VelocityInlet) -> float:
+    """A representative inflow speed for turbulence estimation. Velocity specs
+    use the actual speed; flow-rate/pressure specs fall back to the Physics
+    reference velocity (true speed depends on the patch area, unknown here)."""
+    if bc.mode == "normal":
+        return abs(bc.speed)
+    if bc.mode == "vector":
+        return sum(c * c for c in bc.vector) ** 0.5
+    return model.physics.turb_ref.velocity_scale
+
+
+def inlet_velocity_entries(model: CaseModel, patch: str, bc: VelocityInlet) -> list[str]:
+    """The U entry for each inlet spec (SimFlow-style sub-types)."""
+    match bc.mode:
+        case "normal" | "vector":
+            vec = resolve_inlet_vector(model, patch, bc)
+            return [entry("type", "fixedValue"), entry("value", f"uniform {fmt(vec)}")]
+        case "volumetricFlowRate":
+            return [entry("type", "flowRateInletVelocity"),
+                    entry("volumetricFlowRate", fmt(bc.volumetric_flow_rate)),
+                    entry("value", "uniform (0 0 0)")]
+        case "massFlowRate":
+            # incompressible: flowRateInletVelocity needs a reference density
+            return [entry("type", "flowRateInletVelocity"),
+                    entry("massFlowRate", fmt(bc.mass_flow_rate)),
+                    entry("rho", "rho"),
+                    entry("rhoInlet", fmt(model.physics.fluid.rho)),
+                    entry("value", "uniform (0 0 0)")]
+        case "pressure":
+            return [entry("type", "pressureInletOutletVelocity"),
+                    entry("value", "uniform (0 0 0)")]
+    raise ValueError(f"unknown inlet spec: {bc.mode}")
+
+
 def inlet_turbulence_values(model: CaseModel, bc: VelocityInlet, speed: float) -> dict[str, float]:
     """k / omega / epsilon at an inlet, from intensity+length or direct values (§4.5)."""
     t = bc.turbulence
@@ -86,11 +121,25 @@ def inlet_turbulence_values(model: CaseModel, bc: VelocityInlet, speed: float) -
     }
 
 
+def emit_override(ov: FieldOverride) -> list[str]:
+    """Render a per-field override (the SimFlow per-field layer)."""
+    lines = [entry("type", ov.patch_type)]
+    lines.extend(entry(k, v) for k, v in ov.extra.items())
+    if ov.value:
+        lines.append(entry("value", ov.value))
+    return lines
+
+
 def patch_entries(model: CaseModel, patch: str, bc: PhysicalBC, field: str) -> list[str]:
     """Inner lines of one patch block in one field file - the §4.5 matrix,
-    extended for interFoam fields (p_rgh, alpha.water) in Phase 2."""
+    extended for interFoam fields (p_rgh, alpha.water) in Phase 2.
+
+    A per-field override (bc.overrides[field]) wins over the generated entry."""
     turb = model.physics.turbulence
     free_surface = model.physics.free_surface is not None
+
+    if field in bc.overrides:
+        return emit_override(bc.overrides[field])
 
     if isinstance(bc, Symmetry):
         return [entry("type", "symmetry")]
@@ -121,15 +170,20 @@ def patch_entries(model: CaseModel, patch: str, bc: PhysicalBC, field: str) -> l
                 return [entry("type", "calculated"), entry("value", "uniform 0")]
 
     if isinstance(bc, VelocityInlet):
-        vec = resolve_inlet_vector(model, patch, bc)
-        speed = sum(c * c for c in vec) ** 0.5
+        speed = inlet_reference_speed(model, patch, bc)
         tv = inlet_turbulence_values(model, bc, speed)
         match field:
             case "U":
-                return [entry("type", "fixedValue"), entry("value", f"uniform {fmt(vec)}")]
+                return inlet_velocity_entries(model, patch, bc)
             case "p":
+                if bc.mode == "pressure":
+                    return [entry("type", "fixedValue"),
+                            entry("value", f"uniform {fmt(bc.inlet_pressure)}")]
                 return [entry("type", "zeroGradient")]
             case "p_rgh":
+                if bc.mode == "pressure":
+                    return [entry("type", "fixedValue"),
+                            entry("value", f"uniform {fmt(bc.inlet_pressure)}")]
                 return [entry("type", "fixedFluxPressure"),
                         entry("value", "uniform 0")]
             case "alpha.water":
@@ -154,11 +208,25 @@ def patch_entries(model: CaseModel, patch: str, bc: PhysicalBC, field: str) -> l
                         entry("inletValue", "uniform (0 0 0)"),
                         entry("value", "uniform (0 0 0)")]
             case "p":
-                return [entry("type", "fixedValue"),
-                        entry("value", f"uniform {fmt(bc.gauge_pressure)}")]
+                match bc.outlet_type:
+                    case "totalPressure":
+                        return [entry("type", "totalPressure"),
+                                entry("p0", f"uniform {fmt(bc.total_pressure)}"),
+                                entry("value", f"uniform {fmt(bc.total_pressure)}")]
+                    case "fixedFlux":
+                        return [entry("type", "fixedFluxPressure"),
+                                entry("value", "uniform 0")]
+                    case _:
+                        return [entry("type", "fixedValue"),
+                                entry("value", f"uniform {fmt(bc.gauge_pressure)}")]
             case "p_rgh":
+                if bc.outlet_type == "fixedFlux":
+                    return [entry("type", "fixedFluxPressure"),
+                            entry("value", "uniform 0")]
+                p0 = bc.total_pressure if bc.outlet_type == "totalPressure" \
+                    else bc.gauge_pressure
                 return [entry("type", "totalPressure"),
-                        entry("p0", f"uniform {fmt(bc.gauge_pressure)}")]
+                        entry("p0", f"uniform {fmt(p0)}")]
             case "alpha.water":
                 return [entry("type", "inletOutlet"),
                         entry("inletValue", "uniform 0"),
