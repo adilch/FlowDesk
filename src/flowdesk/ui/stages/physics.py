@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QScrollArea,
     QVBoxLayout,
     QWidget,
@@ -217,6 +218,37 @@ class PhysicsStage(QWidget):
         self.fs_box.setVisible(fs is not None)
         layout.addWidget(self.fs_box)
 
+        # Passive scalar transport (mixing / tracers) - single-phase only
+        st = physics.scalar_transport
+        self.scalar_chk = QCheckBox("Passive scalar transport (tracer / mixing)")
+        self.scalar_chk.setChecked(st is not None)
+        self.scalar_chk.toggled.connect(self._on_scalar_toggled)
+        layout.addWidget(self.scalar_chk)
+
+        self.scalar_box = QWidget()
+        sg = QGridLayout(self.scalar_box)
+        sg.setContentsMargins(0, 0, 0, 0)
+        from flowdesk.model.physics import ScalarTransportModel
+
+        st_values = st if st is not None else ScalarTransportModel()
+        sg.addWidget(QLabel("Field name"), 0, 0)
+        self.scalar_field = QLineEdit(st_values.field)
+        sg.addWidget(self.scalar_field, 0, 1)
+        sg.addWidget(QLabel("Diffusivity D"), 1, 0)
+        self.scalar_d = UnitLineEdit(unit="m2/s", value=st_values.diffusivity,
+                                     minimum=0.0)
+        sg.addWidget(self.scalar_d, 1, 1)
+        sg.addWidget(QLabel("Inlet concentration"), 2, 0)
+        self.scalar_inlet = UnitLineEdit(value=st_values.inlet_value)
+        sg.addWidget(self.scalar_inlet, 2, 1)
+        snote = QLabel("A dimensionless tracer injected at velocity inlets and "
+                       "carried by the flow; view it in Results.")
+        snote.setProperty("role", "caption")
+        snote.setWordWrap(True)
+        sg.addWidget(snote, 3, 0, 1, 2)
+        self.scalar_box.setVisible(st is not None)
+        layout.addWidget(self.scalar_box)
+
         self.apply_btn = make_button("Apply", "primary")
         self.apply_btn.clicked.connect(self.apply)
         layout.addWidget(self.apply_btn)
@@ -254,6 +286,9 @@ class PhysicsStage(QWidget):
         self._update_solver_label(transient=transient)
         label = {v: k for k, v in TURBULENCE_LABELS.items()}[p.turbulence]
         self.turbulence_combo.setCurrentText(label)
+
+    def _on_scalar_toggled(self, checked: bool) -> None:
+        self.scalar_box.setVisible(checked)
 
     def _on_free_surface_toggled(self, checked: bool) -> None:
         self.fs_box.setVisible(checked)
@@ -333,6 +368,17 @@ class PhysicsStage(QWidget):
             )
         else:
             physics.free_surface = None
+
+        if self.scalar_chk.isChecked():
+            from flowdesk.model.physics import ScalarTransportModel
+
+            physics.scalar_transport = ScalarTransportModel(
+                field=self.scalar_field.text().strip() or "s",
+                diffusivity=self.scalar_d.value(),
+                inlet_value=self.scalar_inlet.value())
+        else:
+            physics.scalar_transport = None
+
         physics.turb_ref.velocity_scale = self.u_ref.value()
         physics.turb_ref.intensity = self.intensity.value()
         physics.turb_ref.length_scale = self.length.value()

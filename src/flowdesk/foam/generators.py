@@ -58,7 +58,46 @@ def generate_case(model: CaseModel) -> dict[str, str]:
         files["system/decomposeParDict"] = decompose_par_dict(model)
     for field in bc_matrix.fields_for(model.physics.turbulence, free_surface):
         files[f"0/{field}"] = field_file(model, field)
+    st = model.physics.scalar_transport
+    if st is not None:
+        files[f"0/{st.field}"] = scalar_field_file(model, st)
     return files
+
+
+def scalar_field_file(model: CaseModel, st) -> str:
+    """0/<scalar>: a dimensionless tracer, injected at velocity inlets."""
+    from flowdesk.model.boundaries import (
+        Atmosphere,
+        Empty,
+        Outflow,
+        PressureOutlet,
+        Symmetry,
+        VelocityInlet,
+    )
+
+    def patch_entries(bc) -> list[str]:
+        if isinstance(bc, Symmetry):
+            return [entry("type", "symmetry")]
+        if isinstance(bc, Empty):
+            return [entry("type", "empty")]
+        if isinstance(bc, VelocityInlet):
+            return [entry("type", "fixedValue"),
+                    entry("value", f"uniform {fmt(st.inlet_value)}")]
+        if isinstance(bc, PressureOutlet | Outflow | Atmosphere):
+            return [entry("type", "inletOutlet"),
+                    entry("inletValue", "uniform 0"), entry("value", "uniform 0")]
+        return [entry("type", "zeroGradient")]  # walls, slip
+
+    lines = [f"{'dimensions'.ljust(15)} [0 0 0 0 0 0 0];", "",
+             f"{'internalField'.ljust(15)} uniform 0;", ""]
+    order = [p for p in model.expected_patches() if p in model.boundaries]
+    patch_blocks: list[str] = []
+    for i, patch in enumerate(order):
+        patch_blocks += block(patch, patch_entries(model.boundaries[patch]))
+        if i < len(order) - 1:
+            patch_blocks.append("")
+    lines += block("boundaryField", patch_blocks)
+    return document(st.field, "\n".join(lines), cls="volScalarField")
 
 
 # ----------------------------------------------------------------- system/
@@ -345,6 +384,10 @@ def function_objects(model: CaseModel) -> list[str]:
     )
 
     lines: list[str] = []
+    st = model.physics.scalar_transport
+    if st is not None:
+        lines += _scalar_transport_fo(st)
+        lines.append("")
     for mon in model.monitors:
         if isinstance(mon, ForcesMonitor):
             lines += _forces_fo(mon)
@@ -356,6 +399,20 @@ def function_objects(model: CaseModel) -> list[str]:
             lines += _probes_fo(mon)
         lines.append("")
     return lines
+
+
+def _scalar_transport_fo(st) -> list[str]:
+    return [
+        "scalarTransport",
+        "{",
+        "    type            scalarTransport;",
+        '    libs            ("libsolverFunctionObjects.so");',
+        f"    field           {st.field};",
+        f"    D               {fmt(st.diffusivity)};",
+        "    nCorr           1;",
+        "    resetOnStartUp  false;",
+        "}",
+    ]
 
 
 def _forces_fo(mon) -> list[str]:
@@ -451,6 +508,9 @@ def fv_schemes(model: CaseModel) -> str:
     if p.turbulence is not Turbulence.LAMINAR:
         for f in sorted(turb_fields):
             div.append(entry(f"div(phi,{f})", n.div_turb))
+    if p.scalar_transport is not None:
+        div.append(entry(f"div(phi,{p.scalar_transport.field})",
+                         "Gauss limitedLinear 1"))
     div.append(entry("div((nuEff*dev2(T(grad(U)))))", "Gauss linear"))
     lines += block("divSchemes", div) + [""]
     lines += block("laplacianSchemes", [entry("default", n.laplacian_scheme)]) + [""]
@@ -519,6 +579,17 @@ def fv_solution(model: CaseModel) -> str:
             entry("smoother", "symGaussSeidel"),
             entry("tolerance", n.u_solver.tolerance),
             entry("relTol", 0),
+        ])
+
+    if p.scalar_transport is not None:
+        solvers.append("")
+        # asymmetric convection-diffusion matrix: PBiCGStab/DILU, not a
+        # symmetric smoother (which FPEs on the scalar's diagonal)
+        solvers += block(f'"{p.scalar_transport.field}.*"', [
+            entry("solver", "PBiCGStab"),
+            entry("preconditioner", "DILU"),
+            entry("tolerance", 1e-8),
+            entry("relTol", 0.1 if p.is_steady else 0),
         ])
 
     lines = block("solvers", solvers) + [""]

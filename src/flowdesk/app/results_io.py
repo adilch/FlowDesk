@@ -41,9 +41,19 @@ class LoadedResults:
     def available_fields(self) -> list[str]:
         present = set(self.mesh.cell_data.keys()) | set(self.mesh.point_data.keys())
         out = []
+        known: set[str] = set()
         for label, (array, _comp) in FIELD_LABELS.items():
+            known.add(array)
             if array in present:
                 out.append(label)
+        # extra scalar fields (e.g. a transported tracer 's') the user added
+        for name in sorted(present - known):
+            data = self.mesh.point_data.get(name)
+            if data is None:
+                data = self.mesh.cell_data.get(name)
+            if data is not None and data.ndim == 1:  # scalar only
+                out.append(name)
+                FIELD_LABELS.setdefault(name, (name, None))
         return out
 
 

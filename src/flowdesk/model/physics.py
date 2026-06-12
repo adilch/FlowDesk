@@ -61,6 +61,18 @@ class FreeSurfaceModel(BaseModel):
     water_column_max: tuple[float, float, float] = (0.1, 0.1, 0.1)
 
 
+class ScalarTransportModel(BaseModel):
+    """Passive scalar transport (mixing / tracers) on the existing flow.
+
+    Solved as a scalarTransport function object riding on simpleFoam/pimpleFoam:
+    a dimensionless concentration field is convected by the flow's flux and
+    diffused with the given diffusivity. Injected at velocity inlets."""
+
+    field: str = "s"  # OpenFOAM field name (a word)
+    diffusivity: float = 1e-5  # m^2/s
+    inlet_value: float = 1.0  # concentration carried in at velocity inlets
+
+
 class TurbRef(BaseModel):
     """Reference values for turbulence initialization (§4.4)."""
 
@@ -76,6 +88,8 @@ class PhysicsModel(BaseModel):
     turb_ref: TurbRef = Field(default_factory=TurbRef)
     # None = single-phase (MVP behavior); set = interFoam free surface (Phase 2)
     free_surface: FreeSurfaceModel | None = None
+    # None = no passive scalar; set = transport a tracer on the flow (Phase 2)
+    scalar_transport: ScalarTransportModel | None = None
 
     @property
     def solver(self) -> str:
