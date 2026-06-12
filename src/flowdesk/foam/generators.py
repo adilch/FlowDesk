@@ -326,12 +326,115 @@ def control_dict(model: CaseModel) -> str:
         entry("timeFormat", "general"),
         entry("runTimeModifiable", True),
         "",
-        # Function-object slot: Phase-2 hook (PRD §11); intentionally empty in MVP.
+        # Function objects: runtime monitors (forces, flow rate, field values, probes)
         "functions",
         "{",
+        *("    " + ln for ln in function_objects(model)),
         "}",
     ]
     return document("controlDict", "\n".join(lines))
+
+
+def function_objects(model: CaseModel) -> list[str]:
+    """Inner lines of controlDict's `functions {}` block, one dict per monitor."""
+    from flowdesk.model.monitors import (
+        FieldValueMonitor,
+        FlowRateMonitor,
+        ForcesMonitor,
+        ProbesMonitor,
+    )
+
+    lines: list[str] = []
+    for mon in model.monitors:
+        if isinstance(mon, ForcesMonitor):
+            lines += _forces_fo(mon)
+        elif isinstance(mon, FlowRateMonitor):
+            lines += _flow_rate_fo(mon)
+        elif isinstance(mon, FieldValueMonitor):
+            lines += _field_value_fo(mon)
+        elif isinstance(mon, ProbesMonitor):
+            lines += _probes_fo(mon)
+        lines.append("")
+    return lines
+
+
+def _forces_fo(mon) -> list[str]:
+    patches = " ".join(mon.patches)
+    return [
+        f"{mon.name}",
+        "{",
+        "    type            forceCoeffs;",
+        '    libs            ("libforces.so");',
+        f"    patches         ({patches});",
+        "    rho             rhoInf;",
+        f"    rhoInf          {fmt(mon.rho_inf)};",
+        f"    CofR            {fmt(mon.centre_of_rotation)};",
+        f"    liftDir         {fmt(mon.lift_dir)};",
+        f"    dragDir         {fmt(mon.drag_dir)};",
+        f"    pitchAxis       {fmt(mon.pitch_axis)};",
+        f"    magUInf         {fmt(mon.u_inf)};",
+        f"    lRef            {fmt(mon.l_ref)};",
+        f"    Aref            {fmt(mon.a_ref)};",
+        "    writeControl    timeStep;",
+        "    writeInterval   1;",
+        "}",
+    ]
+
+
+def _flow_rate_fo(mon) -> list[str]:
+    return [
+        f"{mon.name}",
+        "{",
+        "    type            surfaceFieldValue;",
+        '    libs            ("libfieldFunctionObjects.so");',
+        "    regionType      patch;",
+        f"    name            {mon.patch};",
+        "    operation       sum;",
+        "    fields          (phi);",
+        "    writeFields     false;",
+        "    log             true;",
+        "    writeControl    timeStep;",
+        "    writeInterval   1;",
+        "}",
+    ]
+
+
+def _field_value_fo(mon) -> list[str]:
+    return [
+        f"{mon.name}",
+        "{",
+        "    type            volFieldValue;",
+        '    libs            ("libfieldFunctionObjects.so");',
+        "    regionType      all;",
+        f"    operation       {mon.operation};",
+        f"    fields          ({mon.field});",
+        "    writeFields     false;",
+        "    log             true;",
+        "    writeControl    timeStep;",
+        "    writeInterval   1;",
+        "}",
+    ]
+
+
+def _probes_fo(mon) -> list[str]:
+    fields = " ".join(mon.fields)
+    lines = [
+        f"{mon.name}",
+        "{",
+        "    type            probes;",
+        '    libs            ("libsampling.so");',
+        f"    fields          ({fields});",
+        "    probeLocations",
+        "    (",
+    ]
+    lines += [f"        {fmt(loc)}" for loc in mon.locations]
+    lines += [
+        "    );",
+        "    writeControl    timeStep;",
+        "    writeInterval   1;",
+        "}",
+    ]
+    return lines
 
 
 def fv_schemes(model: CaseModel) -> str:

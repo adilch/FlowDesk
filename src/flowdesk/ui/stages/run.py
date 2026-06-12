@@ -59,7 +59,17 @@ class RunStage(QWidget):
         self.plot.setLabel("bottom", "iteration / time")
         self.plot.addLegend(offset=(10, 10))
         self.plot.showGrid(x=True, y=True, alpha=0.2)
-        center.addWidget(self.plot, stretch=1)
+        center.addWidget(self.plot, stretch=2)
+
+        # Monitors plot (linear): forces, flow rate, field values, probes.
+        # Hidden until the case has monitors configured.
+        self.monitor_plot = pg.PlotWidget(title="Monitors")
+        self.monitor_plot.setLabel("bottom", "iteration / time")
+        self.monitor_plot.addLegend(offset=(10, 10))
+        self.monitor_plot.showGrid(x=True, y=True, alpha=0.2)
+        self.monitor_plot.setVisible(bool(session.model.monitors))
+        self._monitor_curves: dict[str, object] = {}
+        center.addWidget(self.monitor_plot, stretch=1)
 
         status_row = QHBoxLayout()
         self.state_label = QLabel("Idle")
@@ -199,6 +209,12 @@ class RunStage(QWidget):
             "mesh, dictionaries, and initial fields), then start a fresh run")
         self.reset_btn.clicked.connect(self.reset_and_rerun)
         form.addWidget(self.reset_btn)
+
+        from flowdesk.ui.stages.monitors_panel import MonitorsPanel
+
+        self.monitors_panel = MonitorsPanel(session)
+        self.monitors_panel.changed.connect(self._on_monitors_changed)
+        form.addWidget(self.monitors_panel)
 
         self._banner_slot = QVBoxLayout()
         form.addLayout(self._banner_slot)
@@ -402,6 +418,10 @@ class RunStage(QWidget):
         self.plot.clear()
         self.plot.addLegend(offset=(10, 10))
         self._curves = {}
+        self.monitor_plot.clear()
+        self.monitor_plot.addLegend(offset=(10, 10))
+        self._monitor_curves = {}
+        self.monitor_plot.setVisible(bool(self.session.model.monitors))
         self.error_panel.setVisible(False)
         self.error_panel.clear()
         while self._explanation_slot.count():
@@ -451,6 +471,32 @@ class RunStage(QWidget):
             if diag is not None:
                 self._diagnosis_shown = True
                 self._show_diagnosis(diag)
+
+        self._refresh_monitor_plot()
+
+    def _on_monitors_changed(self) -> None:
+        self.monitor_plot.setVisible(bool(self.session.model.monitors))
+        self._refresh_monitor_plot()
+        self.model_changed.emit(Stage.RUN)
+
+    def _refresh_monitor_plot(self) -> None:
+        """Plot each configured monitor's postProcessing series (live + final)."""
+        from flowdesk.exec import monitors_io
+
+        if not self.session.model.monitors:
+            return
+        for mon in self.session.model.monitors:
+            for label, series in monitors_io.monitor_series(
+                    self.session.case_dir, mon).items():
+                if not series:
+                    continue
+                key = f"{mon.name}: {label}"
+                if key not in self._monitor_curves:
+                    color = SERIES_COLORS[len(self._monitor_curves) % len(SERIES_COLORS)]
+                    self._monitor_curves[key] = self.monitor_plot.plot(
+                        [], [], pen=pg.mkPen(color, width=1.5), name=key)
+                self._monitor_curves[key].setData([p[0] for p in series],
+                                                  [p[1] for p in series])
 
     def _show_diagnosis(self, diag) -> None:
         bullets = "\n".join(f"  • {s}" for s in diag.suggestions)

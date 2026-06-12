@@ -19,6 +19,7 @@ from flowdesk.model.boundaries import PhysicalBC, VelocityInlet
 from flowdesk.model.findings import Finding, Severity, Stage, errors
 from flowdesk.model.geometry import GeometryModel
 from flowdesk.model.mesh import MeshModel
+from flowdesk.model.monitors import Monitor
 from flowdesk.model.numerics import NumericsModel, RunModel
 from flowdesk.model.ownership import OwnershipMap
 from flowdesk.model.physics import PhysicsModel
@@ -50,6 +51,8 @@ class CaseModel(BaseModel):
     enclosed_domain: bool = False
     # Initialize U internalField with inlet velocity (§4.5, default on)
     init_from_inlet: bool = True
+    # Runtime monitors (function objects): forces, flow rate, field values, probes
+    monitors: list[Monitor] = Field(default_factory=list)
 
     # ------------------------------------------------------------------ patches
 
