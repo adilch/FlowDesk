@@ -121,14 +121,18 @@ class ProjectShell(QWidget):
         for i, stage in enumerate(Stage, start=1):
             shortcut = QShortcut(QKeySequence(f"Ctrl+{i}"), self)
             shortcut.activated.connect(lambda s=stage: self.show_stage(s))
-        QShortcut(QKeySequence("Ctrl+S"), self).activated.connect(self._force_save)
+        QShortcut(QKeySequence("Ctrl+S"), self).activated.connect(self.save_project)
         QShortcut(QKeySequence("Ctrl+R"), self).activated.connect(
             lambda: self.show_stage(Stage.RUN))
         QShortcut(QKeySequence("F"), self).activated.connect(self.viewer.fit)
 
-        # Close project: back to Home (rail bottom; confirm when a run is live)
+        # Save + Close project (rail bottom)
         from flowdesk.ui.components import make_button
 
+        save_btn = make_button("💾  Save project", "secondary")
+        save_btn.setToolTip("Write the case files + project sidecar to disk (Ctrl+S)")
+        save_btn.clicked.connect(self.save_project)
+        self.rail.layout().addWidget(save_btn)
         close_btn = make_button("←  Close project", "ghost")
         close_btn.clicked.connect(self.request_close)
         self.rail.layout().addWidget(close_btn)
@@ -157,8 +161,27 @@ class ProjectShell(QWidget):
         elif stage is Stage.RUN:
             # write controls track the current steady/transient choice
             self.run_stage.refresh_write_controls()
+        elif stage is Stage.MESH:
+            self._refresh_mesh_view()
         else:
             self._refresh_viewer()
+
+    def _refresh_mesh_view(self) -> None:
+        """On the Mesh stage: show the last generated mesh if one exists,
+        otherwise the inputs (domain box + geometry). Returning to Mesh after
+        navigating away should bring the generated mesh back."""
+        meshed = (self.session.case_dir / "constant" / "polyMesh" / "points").exists()
+        if meshed and self.session.model.mesh.result is not None:
+            loaded = False
+            with contextlib.suppress(Exception):
+                self.viewer.plotter.clear()
+                loaded = self.viewer.load_openfoam_mesh(self.session.case_dir) is not None
+                if self.session.model.mesh.snappy.location_in_mesh is not None:
+                    self.viewer.show_location_marker(
+                        self.session.model.mesh.snappy.location_in_mesh)
+            if loaded:
+                return
+        self._refresh_viewer()
 
     def _move_viewer(self, stage: Stage) -> None:
         slots = {
@@ -275,9 +298,29 @@ class ProjectShell(QWidget):
         self.session.save_model()
         self.close_requested.emit()
 
-    def _force_save(self) -> None:
+    def save_project(self) -> None:
+        """Explicit save: persist the sidecar, and write the full case files to
+        disk when the model is valid (so the on-disk OpenFOAM case is current).
+        An invalid model still saves the sidecar - work is never lost."""
+        from flowdesk.model.case import InvalidCaseError
+
         self.session.save_model()
-        self.status_bar.setText("  model saved ✔")
+        try:
+            validated = self.session.model.validated()
+        except InvalidCaseError:
+            self.status_bar.setText(
+                "  Project saved ✔  (sidecar only — case has validation errors)")
+            return
+        try:
+            from flowdesk.foam import writer
+
+            writer.write_case(validated, self.session.case_dir)
+            self.status_bar.setText("  Project saved ✔  (case files written)")
+        except Exception as exc:  # writing is best-effort; sidecar already saved
+            self.status_bar.setText(f"  Project sidecar saved ✔  (case write: {exc})")
+
+    # back-compat alias for the Ctrl+S binding name used elsewhere
+    _force_save = save_project
 
     def _connect_supervisor_log(self) -> None:
         supervisor = self.run_stage.supervisor
