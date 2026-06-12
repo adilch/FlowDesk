@@ -397,6 +397,8 @@ class RunStage(QWidget):
     # ------------------------------------------------------------------ monitoring
 
     def _reset_monitoring(self) -> None:
+        from flowdesk.exec.diagnosis import DivergenceMonitor
+
         self.plot.clear()
         self.plot.addLegend(offset=(10, 10))
         self._curves = {}
@@ -406,6 +408,11 @@ class RunStage(QWidget):
             item = self._explanation_slot.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
+        # live divergence advisor for this run
+        steady = self.session.model.physics.is_steady
+        target = 1.0 if steady else self.session.model.physics.time.max_courant
+        self._divergence_monitor = DivergenceMonitor(steady, target)
+        self._diagnosis_shown = False
 
     def _refresh_monitoring(self) -> None:
         if self.supervisor is None:
@@ -437,6 +444,38 @@ class RunStage(QWidget):
             self.courant_label.setText(f"Co {mean:.2f} / max {peak:.2f}")
         if parser.continuity is not None:
             self.continuity_label.setText(f"continuity {parser.continuity:.2e}")
+
+        # smart divergence advisor: flag a struggling run once, with fixes
+        if not self._diagnosis_shown:
+            diag = self._divergence_monitor.diagnose(parser)
+            if diag is not None:
+                self._diagnosis_shown = True
+                self._show_diagnosis(diag)
+
+    def _show_diagnosis(self, diag) -> None:
+        bullets = "\n".join(f"  • {s}" for s in diag.suggestions)
+        self._add_banner(f"{diag.headline}\n{diag.detail}\n{bullets}", "warn")
+        if diag.action:
+            btn = make_button(diag.action_label)
+            btn.clicked.connect(lambda: self._apply_fix(diag.action))
+            self._explanation_slot.addWidget(btn)
+
+    def _apply_fix(self, action: str) -> None:
+        if action == "robust":
+            from flowdesk.model.numerics import Preset, make_preset
+
+            self.session.model.numerics = make_preset(Preset.ROBUST)
+            done = "Numerics set to Robust."
+        elif action == "lower_courant" and not self.session.model.physics.is_steady:
+            t = self.session.model.physics.time
+            t.max_courant = max(0.05, t.max_courant / 2)
+            done = f"Max Courant lowered to {t.max_courant:g}."
+        else:
+            return
+        self.session.save_model()
+        self._add_banner(f"{done} Stop the run, then 'Reset case & rerun' to apply.",
+                         "info")
+        self.model_changed.emit(Stage.RUN)
 
     def _on_state(self, state: RunState) -> None:
         labels = {

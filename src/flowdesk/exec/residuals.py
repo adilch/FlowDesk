@@ -6,7 +6,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-_RESIDUAL = re.compile(r"Solving for (\w+), Initial residual = ([\d.eE+-]+)")
+# Capture the raw token so nan/inf (a diverged residual) are seen, not skipped.
+_RESIDUAL = re.compile(r"Solving for (\w+), Initial residual = (\S+)")
 _TIME = re.compile(r"^Time = ([\d.eE+-]+)")
 _COURANT = re.compile(r"Courant Number mean: ([\d.eE+-]+) max: ([\d.eE+-]+)")
 _CONTINUITY = re.compile(r"continuity errors.*sum local = ([\d.eE+-]+)")
@@ -42,7 +43,11 @@ class SolverLogParser:
             self._current_time = float(m.group(1))
             self.times.append(self._current_time)
         elif m := _RESIDUAL.search(line):
-            fld, value = m.group(1), float(m.group(2))
+            fld = m.group(1)
+            try:
+                value = float(m.group(2).rstrip(","))  # nan / inf parse fine
+            except ValueError:
+                return
             self.residuals.setdefault(fld, []).append((self._current_time, value))
         elif m := _COURANT.search(line):
             self.courant_max.append((float(m.group(1)), float(m.group(2))))
