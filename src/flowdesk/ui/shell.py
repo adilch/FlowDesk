@@ -146,12 +146,16 @@ class ProjectShell(QWidget):
 
         # Save + Close project (rail bottom); labels shrink with the rail
         from flowdesk.ui.components import make_button
+        from flowdesk.ui.icons import icon
+        from flowdesk.ui.theme import COLORS
 
-        self._save_btn = make_button("💾  Save project", "secondary")
+        self._save_btn = make_button("Save project", "secondary")
+        self._save_btn.setIcon(icon("save", COLORS["text-1"], 18))
         self._save_btn.setToolTip("Write the case files + project sidecar to disk (Ctrl+S)")
         self._save_btn.clicked.connect(self.save_project)
         self.rail.layout().addWidget(self._save_btn)
-        self._close_btn = make_button("←  Close project", "ghost")
+        self._close_btn = make_button("Close project", "ghost")
+        self._close_btn.setIcon(icon("chevron-left", COLORS["accent"], 18))
         self._close_btn.clicked.connect(self.request_close)
         self.rail.layout().addWidget(self._close_btn)
         self.rail.collapse_toggled.connect(self._on_rail_collapsed)
@@ -393,8 +397,8 @@ class ProjectShell(QWidget):
         return strip
 
     def _on_rail_collapsed(self, collapsed: bool) -> None:
-        self._save_btn.setText("💾" if collapsed else "💾  Save project")
-        self._close_btn.setText("←" if collapsed else "←  Close project")
+        self._save_btn.setText("" if collapsed else "Save project")
+        self._close_btn.setText("" if collapsed else "Close project")
 
     def _jump_to_first_finding(self) -> None:
         findings = self.session.model.validate_full()

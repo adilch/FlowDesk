@@ -174,12 +174,17 @@ class RunStage(QWidget):
             w.valueChanged.connect(lambda _v: self._update_disk_estimate())
         self._update_disk_estimate()
 
+        from flowdesk.ui.icons import icon
+
         self.run_btn = make_button("Run", "primary")
+        self.run_btn.setIcon(icon("play", "#FFFFFF", 18))
         self.run_btn.clicked.connect(self.start_run)
         self.stop_btn = make_button("Stop", "secondary")
+        self.stop_btn.setIcon(icon("stop", COLORS["text-1"], 18))
         self.stop_btn.clicked.connect(self._stop)
         self.stop_btn.setEnabled(False)
         self.kill_btn = make_button("Kill", "danger")
+        self.kill_btn.setIcon(icon("close", COLORS["error"], 18))
         self.kill_btn.clicked.connect(self._kill)
         self.kill_btn.setEnabled(False)
         buttons = QHBoxLayout()

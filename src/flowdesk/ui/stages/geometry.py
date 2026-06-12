@@ -162,10 +162,15 @@ class GeometryStage(QWidget):
         title.setProperty("role", "title")
         self._panel_layout.addWidget(title)
 
+        from flowdesk.ui.icons import icon
+        from flowdesk.ui.theme import COLORS
+
         actions = QHBoxLayout()
         self.import_btn = make_button("Import STL…", "primary")
+        self.import_btn.setIcon(icon("import", "#FFFFFF", 18))
         self.import_btn.clicked.connect(self._import_dialog)
         self.create_btn = QToolButton()
+        self.create_btn.setIcon(icon("plus", COLORS["text-1"], 18))
         self.create_btn.setText("Create ▾")
         self.create_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         menu = QMenu(self.create_btn)

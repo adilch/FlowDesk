@@ -3,7 +3,7 @@ clickable anytime; chips communicate readiness. Collapsible to an icon strip."""
 
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import QSize, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -15,7 +15,9 @@ from PyQt6.QtWidgets import (
 )
 
 from flowdesk.model.findings import Stage
+from flowdesk.ui.icons import icon
 from flowdesk.ui.theme import (
+    COLORS,
     RAIL_COLLAPSED_WIDTH,
     RAIL_WIDTH,
     STAGE_STATUSES,
@@ -40,6 +42,8 @@ class RailItem(QPushButton):
         self.stage = stage
         self.setCheckable(True)
         self.setProperty("rail", "true")
+        self.setIcon(icon(stage.value, COLORS["text-2"], 20))
+        self.setIconSize(QSize(18, 18))
         self._status = "empty"
         self._collapsed = False
         self._refresh()
@@ -83,7 +87,7 @@ class WorkflowRail(QFrame):
         self._title.setProperty("role", "section")
         self._toggle = QToolButton()
         self._toggle.setProperty("railToggle", "true")
-        self._toggle.setText("«")
+        self._toggle.setIcon(icon("chevron-left", COLORS["text-2"], 18))
         self._toggle.setToolTip("Collapse the workflow rail")
         self._toggle.clicked.connect(self.toggle_collapsed)
         header.addWidget(self._title, stretch=1)
@@ -107,7 +111,8 @@ class WorkflowRail(QFrame):
         self._collapsed = collapsed
         self.setFixedWidth(RAIL_COLLAPSED_WIDTH if collapsed else RAIL_WIDTH)
         self._title.setVisible(not collapsed)
-        self._toggle.setText("»" if collapsed else "«")
+        self._toggle.setIcon(icon("chevron-right" if collapsed else "chevron-left",
+                                  COLORS["text-2"], 18))
         self._toggle.setToolTip(
             "Expand the workflow rail" if collapsed else "Collapse the workflow rail")
         # keep the toggle reachable when collapsed

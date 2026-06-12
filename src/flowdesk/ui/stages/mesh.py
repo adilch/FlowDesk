@@ -173,10 +173,13 @@ class MeshStage(QWidget):
         self.tabs.setTabEnabled(1, bool(session.model.geometry.surfaces))
         form.addWidget(self.tabs)
 
+        from flowdesk.ui.icons import icon
+
         buttons = QHBoxLayout()
         self.apply_btn = make_button("Apply")
         self.apply_btn.clicked.connect(self.apply)
         self.generate_btn = make_button("Generate Mesh", "primary")
+        self.generate_btn.setIcon(icon("mesh", "#FFFFFF", 18))
         self.generate_btn.clicked.connect(self.generate)
         buttons.addWidget(self.apply_btn)
         buttons.addWidget(self.generate_btn)
