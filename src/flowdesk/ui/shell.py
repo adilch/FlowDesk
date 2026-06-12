@@ -156,6 +156,11 @@ class ProjectShell(QWidget):
         self._save_btn.setToolTip("Write the case files + project sidecar to disk (Ctrl+S)")
         self._save_btn.clicked.connect(self.save_project)
         self.rail.layout().addWidget(self._save_btn)
+        self._template_btn = make_button("Save as template…", "ghost")
+        self._template_btn.setIcon(icon("plus", COLORS["accent"], 18))
+        self._template_btn.setToolTip("Reuse this case's setup as a New Project template")
+        self._template_btn.clicked.connect(self.save_as_template)
+        self.rail.layout().addWidget(self._template_btn)
         self._close_btn = make_button("Close project", "ghost")
         self._close_btn.setIcon(icon("chevron-left", COLORS["accent"], 18))
         self._close_btn.clicked.connect(self.request_close)
@@ -398,6 +403,45 @@ class ProjectShell(QWidget):
     def _on_rail_collapsed(self, collapsed: bool) -> None:
         self._save_btn.setText("" if collapsed else "Save project")
         self._close_btn.setText("" if collapsed else "Close project")
+        self._template_btn.setText("" if collapsed else "Save as template…")
+
+    def save_as_template(self) -> None:
+        """Capture the current case as a reusable New Project template."""
+        from PyQt6.QtWidgets import (
+            QDialog,
+            QDialogButtonBox,
+            QFormLayout,
+            QLineEdit,
+            QPlainTextEdit,
+        )
+
+        from flowdesk.app import user_templates
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Save as template")
+        form = QFormLayout(dialog)
+        name_edit = QLineEdit(f"{self.session.model.meta.name} template")
+        desc_edit = QPlainTextEdit()
+        desc_edit.setPlaceholderText("Optional description shown in New Project")
+        desc_edit.setFixedHeight(64)
+        form.addRow("Name", name_edit)
+        form.addRow("Description", desc_edit)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        form.addRow(buttons)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        self.save_project()  # ensure the model snapshot is current
+        try:
+            t = user_templates.save_as_template(
+                self.session.model, self.session.case_dir,
+                name_edit.text(), desc_edit.toPlainText().strip())
+        except ValueError as exc:
+            self.status_bar.setText(f"  Could not save template: {exc}")
+            return
+        self.status_bar.setText(f"  Saved template '{t.name}' ✔  (available in New Project)")
 
     def _jump_to_first_finding(self) -> None:
         findings = self.session.model.validate_full()

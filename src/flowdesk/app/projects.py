@@ -103,20 +103,26 @@ class ProjectSession:
 
 def create_project(name: str, location: Path, template: str,
                    settings: AppSettings | None = None) -> ProjectSession:
+    from flowdesk.app import user_templates
+
     error = validate_project_name(name)
     if error:
         raise ValueError(error)
-    if template not in TEMPLATES:
+    user_template = None if template in TEMPLATES else \
+        user_templates.get_user_template(template)
+    if template not in TEMPLATES and user_template is None:
         raise ValueError(f"Unknown template: {template}")
 
     case_dir = location / name
     case_dir.mkdir(parents=True, exist_ok=False)
-    model = TEMPLATES[template](name)
-    model.meta.created = datetime.now(UTC).isoformat(timespec="seconds")
-
-    preparer = TEMPLATE_PREPARERS.get(template)
-    if preparer is not None:
-        preparer(model, case_dir)  # geometry-bearing templates generate their STL
+    if user_template is not None:
+        model = user_templates.instantiate(user_template, name, case_dir)
+    else:
+        model = TEMPLATES[template](name)
+        model.meta.created = datetime.now(UTC).isoformat(timespec="seconds")
+        preparer = TEMPLATE_PREPARERS.get(template)
+        if preparer is not None:
+            preparer(model, case_dir)  # geometry-bearing templates generate their STL
 
     # Templates are complete runnable cases: write the case files now when valid;
     # the Empty template has nothing valid to write yet - sidecar only.

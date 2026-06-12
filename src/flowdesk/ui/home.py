@@ -50,10 +50,22 @@ class NewProjectDialog(QDialog):
         form.addRow("Location", location_row)
 
         self.template_combo = QComboBox()
-        self.template_combo.addItems(list(TEMPLATES))
+        self._populate_templates()
         self.template_combo.setCurrentText("Lid-driven cavity")
+        self.template_combo.currentTextChanged.connect(self._on_template_changed)
         form.addRow("Template", self.template_combo)
         layout.addLayout(form)
+
+        template_row = QHBoxLayout()
+        self.template_desc = QLabel("")
+        self.template_desc.setProperty("role", "caption")
+        self.template_desc.setWordWrap(True)
+        self.delete_template_btn = make_button("Delete", "ghost")
+        self.delete_template_btn.clicked.connect(self._delete_template)
+        template_row.addWidget(self.template_desc, stretch=1)
+        template_row.addWidget(self.delete_template_btn)
+        layout.addLayout(template_row)
+        self._on_template_changed(self.template_combo.currentText())
 
         self._banner_slot = QVBoxLayout()
         layout.addLayout(self._banner_slot)
@@ -63,6 +75,43 @@ class NewProjectDialog(QDialog):
         buttons.accepted.connect(self._validate_and_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+    def _populate_templates(self) -> None:
+        from flowdesk.app import user_templates
+
+        current = self.template_combo.currentText()
+        self.template_combo.blockSignals(True)
+        self.template_combo.clear()
+        self.template_combo.addItems(list(TEMPLATES))
+        self._user_template_names = [t.name for t in user_templates.list_user_templates()]
+        if self._user_template_names:
+            self.template_combo.insertSeparator(self.template_combo.count())
+            self.template_combo.addItems(self._user_template_names)
+        if current:
+            self.template_combo.setCurrentText(current)
+        self.template_combo.blockSignals(False)
+
+    def _on_template_changed(self, name: str) -> None:
+        from flowdesk.app import user_templates
+        from flowdesk.app.templates import TEMPLATE_DESCRIPTIONS
+
+        is_user = name in getattr(self, "_user_template_names", [])
+        self.delete_template_btn.setVisible(is_user)
+        if is_user:
+            t = user_templates.get_user_template(name)
+            desc = (t.description or "Your saved template.") if t else ""
+            self.template_desc.setText(f"{desc}   ({t.solver})" if t else desc)
+        else:
+            self.template_desc.setText(TEMPLATE_DESCRIPTIONS.get(name, ""))
+
+    def _delete_template(self) -> None:
+        from flowdesk.app import user_templates
+
+        name = self.template_combo.currentText()
+        if user_templates.delete_template(name):
+            self._populate_templates()
+            self.template_combo.setCurrentText("Lid-driven cavity")
+            self._on_template_changed(self.template_combo.currentText())
 
     def _browse(self) -> None:
         chosen = QFileDialog.getExistingDirectory(self, "Project location",

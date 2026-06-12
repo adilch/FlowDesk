@@ -414,6 +414,26 @@ TEMPLATES: dict[str, Callable[[str], CaseModel]] = {
     "Vortex shedding (transient)": vortex_shedding,
 }
 
+# One-line descriptions shown in the New Project gallery.
+TEMPLATE_DESCRIPTIONS: dict[str, str] = {
+    "Empty case": "A blank project — set up geometry, mesh and physics yourself.",
+    "Lid-driven cavity": "The classic benchmark; doubles as an environment check. "
+                         "Steady, laminar, meshes and runs in seconds.",
+    "Pipe flow": "Turbulent flow in a rectangular duct (velocity inlet → pressure "
+                 "outlet, no-slip walls). Steady k-ω SST.",
+    "External aero": "Flow around a body in a farfield box (blockMesh-only). "
+                     "Steady, parallel.",
+    "Open channel": "Free-surface channel, rigid-lid approximation. Steady SST.",
+    "Flow over a weir": "Water over a submerged weir in a channel; keeps the whole "
+                        "convergence history. Steady SST, parallel.",
+    "Dam break (2D column)": "The canonical interFoam benchmark: a water column "
+                             "collapses across a tank. 2D, laminar, fast.",
+    "Dam break (3D breach)": "SimFlow-style 3D dam breach: a valley domain with the "
+                             "dam carved out, reservoir behind it. interFoam.",
+    "Vortex shedding (transient)": "Laminar von Kármán street behind a square "
+                                   "cylinder at Re 100. pimpleFoam, adaptive Δt.",
+}
+
 # Run after the case directory exists, before the first write (geometry-bearing
 # templates generate their STL here)
 TEMPLATE_PREPARERS: dict[str, Callable[[CaseModel, Path], None]] = {
