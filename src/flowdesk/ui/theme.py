@@ -74,10 +74,14 @@ RADIUS_CARD = 8
 CONTROL_HEIGHT = 32
 TABLE_ROW_HEIGHT = 28
 RAIL_WIDTH = 220
-RIGHT_PANEL_WIDTH = 320  # resizable 280-420
+RAIL_COLLAPSED_WIDTH = 56  # icon-only rail
+# One consistent side-panel width across every stage (was a ragged 320-520).
+# Forms taller than the viewport scroll inside this width.
+RIGHT_PANEL_WIDTH = 380
 RIGHT_PANEL_MIN = 280
 RIGHT_PANEL_MAX = 420
 DRAWER_HEIGHT = 280
+HEADER_HEIGHT = 40  # stage header / breadcrumb bar
 
 
 @dataclass(frozen=True)
@@ -309,6 +313,72 @@ QToolTip {{
     border: 1px solid {c["border"]};
     padding: 6px;
 }}
+
+/* ---- Workflow rail items ---- */
+QPushButton[rail="true"] {{
+    background-color: transparent;
+    border: none;
+    border-left: 3px solid transparent;
+    border-radius: 0;
+    padding: 0 10px;
+    text-align: left;
+    min-height: 34px;
+    color: {c["text-2"]};
+}}
+QPushButton[rail="true"]:hover {{ background-color: {c["bg-2"]}; color: {c["text-1"]}; }}
+QPushButton[rail="true"]:checked {{
+    background-color: {c["bg-2"]};
+    border-left: 3px solid {c["accent"]};
+    color: {c["text-1"]};
+    font-weight: 600;
+}}
+QPushButton[rail="true"]:disabled {{ color: {c["border"]}; }}
+QToolButton[railToggle="true"] {{
+    background: transparent; border: none; color: {c["text-2"]};
+    padding: 4px;
+}}
+QToolButton[railToggle="true"]:hover {{ color: {c["accent"]}; }}
+
+/* ---- Stage header / breadcrumb bar ---- */
+QFrame[header="true"] {{
+    background-color: {c["bg-1"]};
+    border-bottom: 1px solid {c["border"]};
+}}
+QLabel[role="crumb"] {{ color: {c["text-2"]}; }}
+QLabel[role="crumb-active"] {{ color: {c["text-1"]}; font-weight: 600; }}
+
+/* ---- Status bar ---- */
+QFrame[statusbar="true"] {{
+    background-color: {c["bg-1"]};
+    border-top: 1px solid {c["border"]};
+}}
+QLabel[role="status-ok"] {{ color: {c["ok"]}; }}
+QLabel[role="status-warn"] {{ color: {c["warn"]}; }}
+QLabel[role="status-error"] {{ color: {c["error"]}; }}
+QLabel[clickable="true"] {{ color: {c["text-2"]}; }}
+QLabel[clickable="true"]:hover {{ color: {c["accent"]}; }}
+
+/* ---- Surface polish: list/table hover, cards ---- */
+QListWidget {{
+    background-color: {c["bg-1"]};
+    border: 1px solid {c["border"]};
+    border-radius: {RADIUS_INPUT}px;
+    outline: none;
+}}
+QListWidget::item {{ padding: 4px 6px; border-radius: 4px; }}
+QListWidget::item:hover {{ background-color: {c["bg-2"]}; }}
+QListWidget::item:selected {{ background-color: {c["accent"]}; color: #FFFFFF; }}
+QTableWidget::item:hover, QTableView::item:hover {{ background-color: {c["bg-2"]}; }}
+QComboBox:hover, QLineEdit:hover, QSpinBox:hover, QDoubleSpinBox:hover {{
+    border-color: {c["text-2"]};
+}}
+QTabBar::tab {{
+    background: transparent; color: {c["text-2"]};
+    padding: 6px 12px; border: none; border-bottom: 2px solid transparent;
+}}
+QTabBar::tab:hover {{ color: {c["text-1"]}; }}
+QTabBar::tab:selected {{ color: {c["text-1"]}; border-bottom: 2px solid {c["accent"]}; }}
+QTabWidget::pane {{ border: none; }}
 """
 
 

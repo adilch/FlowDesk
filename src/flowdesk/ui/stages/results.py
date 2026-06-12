@@ -49,7 +49,7 @@ class ResultsStage(QWidget):
         layout.addLayout(self.viewer_slot, stretch=1)
 
         panel = QWidget()
-        panel.setFixedWidth(RIGHT_PANEL_WIDTH + 40)
+        panel.setFixedWidth(RIGHT_PANEL_WIDTH)
         form = QVBoxLayout(panel)
         form.setContentsMargins(PANEL_PADDING, PANEL_PADDING, PANEL_PADDING,
                                 PANEL_PADDING)

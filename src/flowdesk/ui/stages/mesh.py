@@ -147,13 +147,12 @@ class MeshStage(QWidget):
         layout.addLayout(self.viewer_slot, stretch=1)
 
         panel = QWidget()
-        panel.setFixedWidth(RIGHT_PANEL_WIDTH + 160)
         form = QVBoxLayout(panel)
         form.setContentsMargins(PANEL_PADDING, PANEL_PADDING, PANEL_PADDING, PANEL_PADDING)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setWidget(panel)
-        scroll.setFixedWidth(RIGHT_PANEL_WIDTH + 180)
+        scroll.setFixedWidth(RIGHT_PANEL_WIDTH)
         layout.addWidget(scroll)
 
         title = QLabel("Mesh")

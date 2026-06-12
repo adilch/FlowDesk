@@ -95,7 +95,7 @@ class BoundariesStage(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setWidget(panel)
-        scroll.setFixedWidth(RIGHT_PANEL_WIDTH + 100)
+        scroll.setFixedWidth(RIGHT_PANEL_WIDTH)
         layout.addWidget(scroll)
 
         title = QLabel("Boundary Conditions")

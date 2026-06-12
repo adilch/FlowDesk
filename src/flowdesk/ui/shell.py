@@ -11,6 +11,7 @@ import contextlib
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
+    QFrame,
     QHBoxLayout,
     QLabel,
     QMessageBox,
@@ -68,8 +69,13 @@ class ProjectShell(QWidget):
         for stage in Stage:
             self._stack.addWidget(self._stages[stage])
 
+        # Stage header / breadcrumb bar (top of the center column)
+        self._header = self._build_header()
+
         center = QVBoxLayout()
         center.setContentsMargins(0, 0, 0, 0)
+        center.setSpacing(0)
+        center.addWidget(self._header)
         center.addWidget(self._stack, stretch=1)
         center.addWidget(self.drawer)
 
@@ -79,14 +85,13 @@ class ProjectShell(QWidget):
         body.addWidget(self.rail)
         body.addLayout(center, stretch=1)
 
-        self.status_bar = QLabel("")
-        self.status_bar.setProperty("role", "caption")
+        self._status_strip = self._build_status_bar()
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
         root.addLayout(body, stretch=1)
-        root.addWidget(self.status_bar)
+        root.addWidget(self._status_strip)
 
         # Signals
         self.rail.stage_selected.connect(self.show_stage)
@@ -126,16 +131,17 @@ class ProjectShell(QWidget):
             lambda: self.show_stage(Stage.RUN))
         QShortcut(QKeySequence("F"), self).activated.connect(self.viewer.fit)
 
-        # Save + Close project (rail bottom)
+        # Save + Close project (rail bottom); labels shrink with the rail
         from flowdesk.ui.components import make_button
 
-        save_btn = make_button("💾  Save project", "secondary")
-        save_btn.setToolTip("Write the case files + project sidecar to disk (Ctrl+S)")
-        save_btn.clicked.connect(self.save_project)
-        self.rail.layout().addWidget(save_btn)
-        close_btn = make_button("←  Close project", "ghost")
-        close_btn.clicked.connect(self.request_close)
-        self.rail.layout().addWidget(close_btn)
+        self._save_btn = make_button("💾  Save project", "secondary")
+        self._save_btn.setToolTip("Write the case files + project sidecar to disk (Ctrl+S)")
+        self._save_btn.clicked.connect(self.save_project)
+        self.rail.layout().addWidget(self._save_btn)
+        self._close_btn = make_button("←  Close project", "ghost")
+        self._close_btn.clicked.connect(self.request_close)
+        self.rail.layout().addWidget(self._close_btn)
+        self.rail.collapse_toggled.connect(self._on_rail_collapsed)
 
         self.show_stage(Stage.GEOMETRY)
         self.rail.select(Stage.GEOMETRY)
@@ -152,6 +158,10 @@ class ProjectShell(QWidget):
 
     def show_stage(self, stage: Stage) -> None:
         self._stack.setCurrentWidget(self._stages[stage])
+        from flowdesk.ui.rail import STAGE_INFO
+
+        number, label = STAGE_INFO[stage]
+        self._crumb_stage.setText(f"{number} · {label}")
         self._move_viewer(stage)
         if stage is Stage.BOUNDARIES:
             self.boundaries_stage.refresh()
@@ -328,6 +338,58 @@ class ProjectShell(QWidget):
             supervisor.line.connect(self.drawer.log.append_line)
             self._connected_supervisor = supervisor
 
+    # ---------------------------------------------------------- header & status
+
+    def _build_header(self) -> QFrame:
+        from flowdesk.ui.theme import HEADER_HEIGHT
+
+        header = QFrame()
+        header.setProperty("header", "true")
+        header.setFixedHeight(HEADER_HEIGHT)
+        h = QHBoxLayout(header)
+        h.setContentsMargins(16, 0, 16, 0)
+        self._crumb_project = QLabel(self.session.model.meta.name)
+        self._crumb_project.setProperty("role", "crumb")
+        sep = QLabel("›")
+        sep.setProperty("role", "crumb")
+        self._crumb_stage = QLabel("Geometry")
+        self._crumb_stage.setProperty("role", "crumb-active")
+        h.addWidget(self._crumb_project)
+        h.addWidget(sep)
+        h.addWidget(self._crumb_stage)
+        h.addStretch()
+        self._header_info = QLabel("")
+        self._header_info.setProperty("role", "caption")
+        h.addWidget(self._header_info)
+        return header
+
+    def _build_status_bar(self) -> QFrame:
+        from flowdesk.ui.components import make_button
+
+        strip = QFrame()
+        strip.setProperty("statusbar", "true")
+        h = QHBoxLayout(strip)
+        h.setContentsMargins(16, 4, 16, 4)
+        self.status_bar = QLabel("")
+        self.status_bar.setProperty("role", "caption")
+        h.addWidget(self.status_bar)
+        h.addStretch()
+        self._validation_btn = make_button("", "ghost")
+        self._validation_btn.clicked.connect(self._jump_to_first_finding)
+        h.addWidget(self._validation_btn)
+        return strip
+
+    def _on_rail_collapsed(self, collapsed: bool) -> None:
+        self._save_btn.setText("💾" if collapsed else "💾  Save project")
+        self._close_btn.setText("←" if collapsed else "←  Close project")
+
+    def _jump_to_first_finding(self) -> None:
+        findings = self.session.model.validate_full()
+        ordered = [f for f in findings if f.severity is Severity.ERROR] or findings
+        if ordered:
+            self.show_stage(ordered[0].stage)
+            self.rail.select(ordered[0].stage)
+
     def _refresh_status(self) -> None:
         statuses = self.session.stage_statuses()
         enabled = {s: True for s in Stage}
@@ -340,8 +402,29 @@ class ProjectShell(QWidget):
         findings = self.session.model.validate_full()
         n_err = sum(1 for f in findings if f.severity is Severity.ERROR)
         n_warn = sum(1 for f in findings if f.severity is Severity.WARNING)
-        cells = f"{result.cell_count:,} cells • " if result else ""
+
+        # header info (right side): env, cells, run state
         env = "✔ env" if self.env.available else "❌ env"
-        self.status_bar.setText(
-            f"  {env} • {cells}{n_err} errors, {n_warn} warnings"
-        )
+        cells = f" • {result.cell_count:,} cells" if result else ""
+        run_state = self._run_state_text()
+        self._header_info.setText(f"{env}{cells}{run_state}")
+
+        # status bar (bottom): clickable validation summary
+        if n_err:
+            self._validation_btn.setText(f"❌ {n_err} error{'s' if n_err > 1 else ''}"
+                                         + (f"  ⚠ {n_warn}" if n_warn else ""))
+            self._validation_btn.setToolTip("Jump to the first error")
+            self._validation_btn.setVisible(True)
+        elif n_warn:
+            self._validation_btn.setText(f"⚠ {n_warn} warning{'s' if n_warn > 1 else ''}")
+            self._validation_btn.setToolTip("Jump to the first warning")
+            self._validation_btn.setVisible(True)
+        else:
+            self._validation_btn.setText("✔ no issues")
+            self._validation_btn.setVisible(True)
+
+    def _run_state_text(self) -> str:
+        supervisor = self.run_stage.supervisor
+        if supervisor is None:
+            return ""
+        return f" • {supervisor.state.value}"

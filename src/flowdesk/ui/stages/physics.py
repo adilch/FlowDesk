@@ -65,7 +65,9 @@ class PhysicsStage(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setWidget(panel)
-        scroll.setFixedWidth(520)
+        from flowdesk.ui.theme import RIGHT_PANEL_WIDTH
+
+        scroll.setFixedWidth(RIGHT_PANEL_WIDTH)
         outer.addWidget(scroll)
 
         title = QLabel("Physics")
