@@ -36,8 +36,15 @@ from flowdesk.model.geometry import (
     SpherePrimitive,
     Surface,
 )
-from flowdesk.ui.components import Banner, TrafficLightRow, UnitLineEdit, Vec3Input, make_button
-from flowdesk.ui.theme import PANEL_PADDING, RIGHT_PANEL_WIDTH
+from flowdesk.ui.components import (
+    Banner,
+    TrafficLightRow,
+    UnitLineEdit,
+    Vec3Input,
+    make_button,
+    split_viewer_panel,
+)
+from flowdesk.ui.theme import PANEL_PADDING
 
 EYE_SHOWN = "👁"
 EYE_HIDDEN = "—"
@@ -144,14 +151,12 @@ class GeometryStage(QWidget):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         self.viewer_slot = QVBoxLayout()
-        layout.addLayout(self.viewer_slot, stretch=1)
 
         panel = QWidget()
-        panel.setFixedWidth(RIGHT_PANEL_WIDTH)
         self._panel_layout = QVBoxLayout(panel)
         self._panel_layout.setContentsMargins(
             PANEL_PADDING, PANEL_PADDING, PANEL_PADDING, PANEL_PADDING)
-        layout.addWidget(panel)
+        split_viewer_panel(layout, self.viewer_slot, panel)
 
         title = QLabel("Geometry")
         title.setProperty("role", "title")

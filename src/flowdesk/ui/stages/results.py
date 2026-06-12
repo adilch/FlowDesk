@@ -29,8 +29,9 @@ from flowdesk.ui.components import (
     UnitLineEdit,
     Vec3Input,
     make_button,
+    split_viewer_panel,
 )
-from flowdesk.ui.theme import COLORS, PANEL_PADDING, RIGHT_PANEL_WIDTH
+from flowdesk.ui.theme import COLORS, PANEL_PADDING
 
 
 class ResultsStage(QWidget):
@@ -46,14 +47,12 @@ class ResultsStage(QWidget):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         self.viewer_slot = QVBoxLayout()
-        layout.addLayout(self.viewer_slot, stretch=1)
 
         panel = QWidget()
-        panel.setFixedWidth(RIGHT_PANEL_WIDTH)
         form = QVBoxLayout(panel)
         form.setContentsMargins(PANEL_PADDING, PANEL_PADDING, PANEL_PADDING,
                                 PANEL_PADDING)
-        layout.addWidget(panel)
+        split_viewer_panel(layout, self.viewer_slot, panel)
 
         title = QLabel("Results")
         title.setProperty("role", "title")

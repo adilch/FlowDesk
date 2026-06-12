@@ -18,12 +18,35 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QPlainTextEdit,
     QPushButton,
+    QSplitter,
     QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
-from flowdesk.ui.theme import CONTROL_RHYTHM, STAGE_STATUSES, repolish
+from flowdesk.ui.theme import CONTROL_RHYTHM, RIGHT_PANEL_WIDTH, STAGE_STATUSES, repolish
+
+
+def split_viewer_panel(root_layout, viewer_slot, side_panel,
+                       panel_width: int = RIGHT_PANEL_WIDTH) -> QSplitter:
+    """Put the shared viewer (carried in `viewer_slot`) and a stage's side panel
+    into a draggable horizontal splitter, and add it to `root_layout`. The
+    divider resizes the panel (clamped, never collapsed to zero)."""
+    viewer_box = QWidget()
+    viewer_box.setLayout(viewer_slot)
+    viewer_box.setMinimumWidth(240)
+    side_panel.setMinimumWidth(300)
+    side_panel.setMaximumWidth(720)
+    splitter = QSplitter(Qt.Orientation.Horizontal)
+    splitter.addWidget(viewer_box)
+    splitter.addWidget(side_panel)
+    splitter.setStretchFactor(0, 1)
+    splitter.setStretchFactor(1, 0)
+    splitter.setChildrenCollapsible(False)
+    splitter.setHandleWidth(6)
+    splitter.setSizes([900, panel_width])
+    root_layout.addWidget(splitter)
+    return splitter
 
 # --- Buttons --------------------------------------------------------------------
 

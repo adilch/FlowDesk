@@ -30,6 +30,7 @@ from flowdesk.ui.components import (
     UnitLineEdit,
     Vec3Input,
     make_button,
+    split_viewer_panel,
 )
 from flowdesk.ui.stages.model_selector import ModelSelector
 from flowdesk.ui.theme import GROUP_GAP, PANEL_PADDING
@@ -55,7 +56,6 @@ class PhysicsStage(QWidget):
         outer = QHBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         self.viewer_slot = QVBoxLayout()
-        outer.addLayout(self.viewer_slot, stretch=1)
 
         panel = QWidget()
         layout = QVBoxLayout(panel)
@@ -65,10 +65,7 @@ class PhysicsStage(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setWidget(panel)
-        from flowdesk.ui.theme import RIGHT_PANEL_WIDTH
-
-        scroll.setFixedWidth(RIGHT_PANEL_WIDTH)
-        outer.addWidget(scroll)
+        split_viewer_panel(outer, self.viewer_slot, scroll)
 
         title = QLabel("Physics")
         title.setProperty("role", "title")

@@ -30,9 +30,15 @@ from flowdesk.exec.pipeline import PipelineRunner, PipelineState
 from flowdesk.model.case import MESH_SCOPE, InvalidCaseError
 from flowdesk.model.findings import Stage
 from flowdesk.platform.commands import Environment
-from flowdesk.ui.components import Banner, TrafficLightRow, Vec3Input, make_button
+from flowdesk.ui.components import (
+    Banner,
+    TrafficLightRow,
+    Vec3Input,
+    make_button,
+    split_viewer_panel,
+)
 from flowdesk.ui.stages.snappy_panel import SnappyPanel
-from flowdesk.ui.theme import PANEL_PADDING, RIGHT_PANEL_WIDTH
+from flowdesk.ui.theme import PANEL_PADDING
 
 
 class BackgroundPanel(QWidget):
@@ -144,7 +150,6 @@ class MeshStage(QWidget):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         self.viewer_slot = QVBoxLayout()
-        layout.addLayout(self.viewer_slot, stretch=1)
 
         panel = QWidget()
         form = QVBoxLayout(panel)
@@ -152,8 +157,7 @@ class MeshStage(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setWidget(panel)
-        scroll.setFixedWidth(RIGHT_PANEL_WIDTH)
-        layout.addWidget(scroll)
+        split_viewer_panel(layout, self.viewer_slot, scroll)
 
         title = QLabel("Mesh")
         title.setProperty("role", "title")

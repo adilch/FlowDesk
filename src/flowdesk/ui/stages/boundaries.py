@@ -42,8 +42,9 @@ from flowdesk.ui.components import (
     UnitLineEdit,
     Vec3Input,
     make_button,
+    split_viewer_panel,
 )
-from flowdesk.ui.theme import PANEL_PADDING, PATCH_COLORS, RIGHT_PANEL_WIDTH
+from flowdesk.ui.theme import PANEL_PADDING, PATCH_COLORS
 
 _KIND_TO_LABEL = {
     "velocityInlet": "Velocity inlet",
@@ -85,7 +86,6 @@ class BoundariesStage(QWidget):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         self.viewer_slot = QVBoxLayout()
-        layout.addLayout(self.viewer_slot, stretch=1)
 
         from PyQt6.QtWidgets import QScrollArea
 
@@ -95,8 +95,7 @@ class BoundariesStage(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setWidget(panel)
-        scroll.setFixedWidth(RIGHT_PANEL_WIDTH)
-        layout.addWidget(scroll)
+        split_viewer_panel(layout, self.viewer_slot, scroll)
 
         title = QLabel("Boundary Conditions")
         title.setProperty("role", "title")

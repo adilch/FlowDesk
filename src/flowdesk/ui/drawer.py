@@ -15,14 +15,14 @@ from PyQt6.QtWidgets import (
 
 from flowdesk.exec.pipeline import PipelineRunner, PipelineState
 from flowdesk.ui.components import LogView, make_button
-from flowdesk.ui.theme import DRAWER_HEIGHT
 
 
 class RunDrawer(QFrame):
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
         self.setProperty("panel", "true")
-        self.setFixedHeight(DRAWER_HEIGHT)
+        # resizable via the shell's vertical splitter; just clamp the minimum
+        self.setMinimumHeight(110)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 8, 16, 8)

@@ -72,12 +72,25 @@ class ProjectShell(QWidget):
         # Stage header / breadcrumb bar (top of the center column)
         self._header = self._build_header()
 
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtWidgets import QSplitter
+
+        from flowdesk.ui.theme import DRAWER_HEIGHT
+
         center = QVBoxLayout()
         center.setContentsMargins(0, 0, 0, 0)
         center.setSpacing(0)
         center.addWidget(self._header)
-        center.addWidget(self._stack, stretch=1)
-        center.addWidget(self.drawer)
+        # stack | drawer in a draggable vertical splitter (resizable log)
+        vsplit = QSplitter(Qt.Orientation.Vertical)
+        vsplit.addWidget(self._stack)
+        vsplit.addWidget(self.drawer)
+        vsplit.setStretchFactor(0, 1)
+        vsplit.setStretchFactor(1, 0)
+        vsplit.setChildrenCollapsible(False)
+        vsplit.setHandleWidth(6)
+        vsplit.setSizes([600, DRAWER_HEIGHT])
+        center.addWidget(vsplit, stretch=1)
 
         body = QHBoxLayout()
         body.setContentsMargins(0, 0, 0, 0)

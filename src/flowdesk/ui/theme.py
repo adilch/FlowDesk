@@ -379,6 +379,12 @@ QTabBar::tab {{
 QTabBar::tab:hover {{ color: {c["text-1"]}; }}
 QTabBar::tab:selected {{ color: {c["text-1"]}; border-bottom: 2px solid {c["accent"]}; }}
 QTabWidget::pane {{ border: none; }}
+
+/* ---- Splitter handles (resizable panels) ---- */
+QSplitter::handle {{ background-color: {c["bg-1"]}; }}
+QSplitter::handle:horizontal {{ width: 6px; border-left: 1px solid {c["border"]}; }}
+QSplitter::handle:vertical {{ height: 6px; border-top: 1px solid {c["border"]}; }}
+QSplitter::handle:hover {{ background-color: {c["accent"]}; }}
 """
 
 

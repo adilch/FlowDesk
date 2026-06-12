@@ -84,6 +84,50 @@ def test_valid_project_shows_no_issues(qtbot, tmp_path) -> None:
     assert "no issues" in shell._validation_btn.text().lower()
 
 
+def test_stages_have_resizable_side_panels(qtbot, tmp_path) -> None:
+    from PyQt6.QtWidgets import QSplitter
+
+    session = projects.create_project("rs", tmp_path, "Lid-driven cavity")
+    shell = _shell(session)
+    qtbot.addWidget(shell)
+    for stage in (Stage.GEOMETRY, Stage.MESH, Stage.PHYSICS,
+                  Stage.BOUNDARIES, Stage.RESULTS):
+        shell.show_stage(stage)
+        splitters = shell._stages[stage].findChildren(QSplitter)
+        assert splitters, f"{stage.value} stage has no resizable splitter"
+
+
+def test_drawer_is_vertically_resizable(qtbot, tmp_path) -> None:
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtWidgets import QSplitter
+
+    session = projects.create_project("dr", tmp_path, "Lid-driven cavity")
+    shell = _shell(session)
+    qtbot.addWidget(shell)
+    vsplits = [s for s in shell.findChildren(QSplitter)
+               if s.orientation() == Qt.Orientation.Vertical]
+    assert vsplits, "no vertical splitter for the run drawer"
+    # the drawer is a child of the vertical splitter
+    assert any(shell.drawer in (s.widget(i) for i in range(s.count()))
+               for s in vsplits)
+
+
+def test_split_helper_clamps_panel(qtbot) -> None:
+    from PyQt6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
+
+    from flowdesk.ui.components import split_viewer_panel
+
+    host = QWidget()
+    qtbot.addWidget(host)
+    root = QHBoxLayout(host)
+    viewer_slot = QVBoxLayout()
+    panel = QWidget()
+    sp = split_viewer_panel(root, viewer_slot, panel)
+    assert sp.count() == 2
+    assert not sp.childrenCollapsible()
+    assert panel.minimumWidth() >= 300
+
+
 def test_panel_widths_unified() -> None:
     """Every stage's side panel uses the one width constant (no ragged +N)."""
     from pathlib import Path
