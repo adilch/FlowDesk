@@ -249,6 +249,9 @@ class ProjectShell(QWidget):
         # reflect geometry add/delete/edit in the canvas immediately
         if self._stack.currentWidget() is self.geometry_stage:
             self._refresh_viewer()
+        # the model-select wizard can toggle free surface: refresh the water box
+        elif self._stack.currentWidget() is self.physics_stage:
+            self._preview_column()
 
     def request_close(self) -> None:
         """Close the project (§5.2: confirm if running). The detached solver

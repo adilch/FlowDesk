@@ -31,6 +31,7 @@ from flowdesk.ui.components import (
     Vec3Input,
     make_button,
 )
+from flowdesk.ui.stages.model_selector import ModelSelector
 from flowdesk.ui.theme import GROUP_GAP, PANEL_PADDING
 
 TURBULENCE_LABELS = {
@@ -71,37 +72,50 @@ class PhysicsStage(QWidget):
         title.setProperty("role", "title")
         layout.addWidget(title)
 
-        grid = QGridLayout()
-        grid.addWidget(QLabel("Time treatment"), 0, 0)
+        # Step-by-step model-select wizard drives solver / free surface / time
+        self.model_selector = ModelSelector(session)
+        self.model_selector.applied.connect(self._on_model_selected)
+        layout.addWidget(self.model_selector)
+
+        # Backing controls for time treatment + free surface. The wizard (and
+        # its feature toggles) drive these; kept functional but hidden so the
+        # wizard is the single visible control for model selection.
+        self._manual_box = QWidget()
+        self._manual_box.setVisible(False)
+        manual = QGridLayout(self._manual_box)
+        manual.setContentsMargins(0, 0, 0, 0)
+        manual.addWidget(QLabel("Time treatment"), 0, 0)
         self.time_seg = SegmentedControl(
             ["Steady", "Transient"], current=0 if physics.is_steady else 1)
         self.time_seg.selectionChanged.connect(self._on_time_changed)
-        grid.addWidget(self.time_seg, 0, 1)
-        # users think in physics; the solver name stays visible (§4.4)
+        manual.addWidget(self.time_seg, 0, 1)
         self.solver_label = QLabel(f"solver: {physics.solver}")
         self.solver_label.setProperty("role", "caption")
-        grid.addWidget(self.solver_label, 0, 2)
+        manual.addWidget(self.solver_label, 0, 2)
+        layout.addWidget(self._manual_box)
 
-        grid.addWidget(QLabel("Turbulence"), 1, 0)
+        # Tuning forms (visible): turbulence model, fluid, viscosity
+        grid = QGridLayout()
+        grid.addWidget(QLabel("Turbulence model"), 0, 0)
         self.turbulence_combo = QComboBox()
         self.turbulence_combo.addItems(list(TURBULENCE_LABELS))
         current = {v: k for k, v in TURBULENCE_LABELS.items()}[physics.turbulence]
         self.turbulence_combo.setCurrentText(current)
-        grid.addWidget(self.turbulence_combo, 1, 1)
+        grid.addWidget(self.turbulence_combo, 0, 1)
 
-        grid.addWidget(QLabel("Fluid"), 2, 0)
+        grid.addWidget(QLabel("Fluid"), 1, 0)
         self.fluid_combo = QComboBox()
         self.fluid_combo.addItems(list(FLUID_LABELS))
         preset_name = {"water": "Water (20 °C)", "air": "Air"}.get(
             physics.fluid.name, "Custom…")
         self.fluid_combo.setCurrentText(preset_name)
         self.fluid_combo.currentTextChanged.connect(self._on_fluid_changed)
-        grid.addWidget(self.fluid_combo, 2, 1)
+        grid.addWidget(self.fluid_combo, 1, 1)
 
-        grid.addWidget(QLabel("Kinematic viscosity ν"), 3, 0)
+        grid.addWidget(QLabel("Kinematic viscosity ν"), 2, 0)
         self.nu_edit = UnitLineEdit(unit="m2/s", value=physics.fluid.nu, minimum=1e-12)
         self.nu_edit.setEnabled(preset_name == "Custom…")
-        grid.addWidget(self.nu_edit, 3, 1)
+        grid.addWidget(self.nu_edit, 2, 1)
         layout.addLayout(grid)
 
         # Reference values (§4.4)
@@ -152,13 +166,19 @@ class PhysicsStage(QWidget):
         self.transient_box.setVisible(not physics.is_steady)
         layout.addWidget(self.transient_box)
 
-        # Free surface (interFoam) - Phase 2
+        # Free surface (interFoam): the checkbox is backing state driven by the
+        # wizard (hidden); the parameter box below stays visible when active
         fs = physics.free_surface
-        self.free_surface_chk = QCheckBox("Free surface (interFoam) — two-phase "
-                                          "water/air with gravity")
+        self.free_surface_chk = QCheckBox("Free surface (interFoam)")
         self.free_surface_chk.setChecked(fs is not None)
         self.free_surface_chk.toggled.connect(self._on_free_surface_toggled)
-        layout.addWidget(self.free_surface_chk)
+        manual.addWidget(self.free_surface_chk, 1, 0, 1, 3)
+
+        fs_title = QLabel("FREE SURFACE (interFoam)")
+        fs_title.setProperty("role", "section")
+        self._fs_title = fs_title
+        fs_title.setVisible(fs is not None)
+        layout.addWidget(fs_title)
 
         self.fs_box = QWidget()
         fsg = QGridLayout(self.fs_box)
@@ -212,8 +232,33 @@ class PhysicsStage(QWidget):
         self.transient_box.setVisible(index == 1)
         self._update_solver_label(transient=index == 1)
 
+    def _on_model_selected(self) -> None:
+        """The wizard wrote the model selection; reflect it in the forms + persist."""
+        self._sync_controls_from_model()
+        self.session.save_model()
+        self.session.staleness.mark_applied(Stage.PHYSICS, "simulation type changed")
+        self.model_changed.emit(Stage.PHYSICS)
+
+    def _sync_controls_from_model(self) -> None:
+        p = self.session.model.physics
+        fs = p.free_surface is not None
+        transient = not p.is_steady
+        self.time_seg._group.blockSignals(True)
+        self.free_surface_chk.blockSignals(True)
+        self.time_seg._group.button(1 if transient else 0).setChecked(True)
+        self.free_surface_chk.setChecked(fs)
+        self.time_seg._group.blockSignals(False)
+        self.free_surface_chk.blockSignals(False)
+        self.transient_box.setVisible(transient)
+        self.fs_box.setVisible(fs)
+        self._fs_title.setVisible(fs)
+        self._update_solver_label(transient=transient)
+        label = {v: k for k, v in TURBULENCE_LABELS.items()}[p.turbulence]
+        self.turbulence_combo.setCurrentText(label)
+
     def _on_free_surface_toggled(self, checked: bool) -> None:
         self.fs_box.setVisible(checked)
+        self._fs_title.setVisible(checked)
         if checked and self.time_seg.current() == 0:
             # interFoam is transient-only: switch and say so
             self.time_seg._group.button(1).setChecked(True)
@@ -300,6 +345,7 @@ class PhysicsStage(QWidget):
             summary = (f"turbulence model changed: {old_turbulence.value} → "
                        f"{physics.turbulence.value} (wall functions regenerate)")
         self.session.staleness.mark_applied(Stage.PHYSICS, summary)
+        self.model_selector.refresh()  # badges/solver reflect tuning changes
         self.model_changed.emit(Stage.PHYSICS)
 
     def _clear_banners(self) -> None:
