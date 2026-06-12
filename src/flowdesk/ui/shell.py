@@ -119,6 +119,8 @@ class ProjectShell(QWidget):
         # and every blockMesh/snappy line stream into the log live
         self.mesh_stage.mesh_started.connect(self.drawer.attach)
         self.mesh_stage.mesh_completed.connect(self._on_mesh_completed)
+        # click a meshed patch -> highlight it (distinct colours for multiple)
+        self.mesh_stage.patches_selected.connect(self.viewer.color_selected_patches)
         self.geometry_stage.visibility_toggled.connect(self.viewer.set_surface_visible)
         self.boundaries_stage.selection_changed.connect(
             self.viewer.highlight_patches)
@@ -194,20 +196,17 @@ class ProjectShell(QWidget):
             self._refresh_viewer()
 
     def _refresh_mesh_view(self) -> None:
-        """On the Mesh stage: show the last generated mesh if one exists,
-        otherwise the inputs (domain box + geometry). Returning to Mesh after
-        navigating away should bring the generated mesh back."""
+        """On the Mesh stage: show the last generated mesh (per-patch, so patches
+        can be clicked to highlight) if one exists, otherwise the inputs (domain
+        box + geometry)."""
         meshed = (self.session.case_dir / "constant" / "polyMesh" / "points").exists()
         if meshed and self.session.model.mesh.result is not None:
-            loaded = False
             with contextlib.suppress(Exception):
-                self.viewer.plotter.clear()
-                loaded = self.viewer.load_openfoam_mesh(self.session.case_dir) is not None
-                if self.session.model.mesh.snappy.location_in_mesh is not None:
-                    self.viewer.show_location_marker(
-                        self.session.model.mesh.snappy.location_in_mesh)
-            if loaded:
-                return
+                names = self.viewer.show_mesh_patches(self.session.case_dir)
+                if names:
+                    # restore any current patch-list selection in the view
+                    self.mesh_stage._on_patch_selection()
+                    return
         self._refresh_viewer()
 
     def _move_viewer(self, stage: Stage) -> None:
@@ -292,7 +291,7 @@ class ProjectShell(QWidget):
             return
         self.boundaries_stage.refresh()
         with contextlib.suppress(Exception):
-            self.viewer.load_openfoam_mesh(self.session.case_dir)
+            self.viewer.show_mesh_patches(self.session.case_dir)
 
     # ------------------------------------------------------------------ status
 

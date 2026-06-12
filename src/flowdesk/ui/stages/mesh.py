@@ -3,11 +3,13 @@ persistent quality report, Generate Mesh pipeline, mesh preview hook."""
 
 from __future__ import annotations
 
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QListWidget,
+    QListWidgetItem,
     QScrollArea,
     QSpinBox,
     QTableWidget,
@@ -137,6 +139,7 @@ class MeshStage(QWidget):
     model_changed = pyqtSignal(Stage)
     mesh_started = pyqtSignal(object)  # the PipelineRunner, for drawer attach
     mesh_completed = pyqtSignal(bool)
+    patches_selected = pyqtSignal(list)  # patch names to highlight in the viewer
 
     def __init__(self, session: ProjectSession, env: Environment,
                  parent: QWidget | None = None):
@@ -194,7 +197,18 @@ class MeshStage(QWidget):
         self._quality_box = QVBoxLayout()
         form.addLayout(self._quality_box)
         form.addStretch()
+
+        # populated by _show_quality; selecting patch(es) highlights them in 3D
+        self.patch_view_list = QListWidget()
+        self.patch_view_list.setSelectionMode(
+            QListWidget.SelectionMode.ExtendedSelection)
+        self.patch_view_list.itemSelectionChanged.connect(self._on_patch_selection)
         self._show_quality()
+
+    def _on_patch_selection(self) -> None:
+        names = [item.data(Qt.ItemDataRole.UserRole)
+                 for item in self.patch_view_list.selectedItems()]
+        self.patches_selected.emit(names)
 
     def refresh(self) -> None:
         """Called when geometry changed upstream (surfaces added/removed)."""
@@ -333,11 +347,17 @@ class MeshStage(QWidget):
                 f"{cov.thickness_overall:g} m overall",
                 "pass" if fraction >= 0.7 else "warn"))
 
-        patches = ", ".join(f"{p.name} ({p.n_faces})" for p in result.patches)
-        patch_label = QLabel(f"Patches: {patches}")
-        patch_label.setProperty("role", "caption")
-        patch_label.setWordWrap(True)
-        self._quality_box.addWidget(patch_label)
+        # Interactive patch list: selecting patch(es) highlights them in 3D
+        header = QLabel("PATCHES — click to highlight in the view")
+        header.setProperty("role", "section")
+        self._quality_box.addWidget(header)
+        self.patch_view_list.clear()
+        for p in result.patches:
+            item = QListWidgetItem(f"{p.name}   ({p.n_faces:,} faces)")
+            item.setData(Qt.ItemDataRole.UserRole, p.name)
+            self.patch_view_list.addItem(item)
+        self.patch_view_list.setMaximumHeight(150)
+        self._quality_box.addWidget(self.patch_view_list)
 
     # ------------------------------------------------------------------ banners
 

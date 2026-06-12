@@ -156,6 +156,59 @@ class ViewerWidget(QWidget):
                 prop.EdgeVisibilityOff()
         self.plotter.render()
 
+    # Distinct highlight colours (Okabe-Ito categorical) for selected patches.
+    _PATCH_PALETTE = ["#0072B2", "#D55E00", "#009E73", "#CC79A7",
+                      "#56B4E9", "#E69F00", "#F0E442", "#999999"]
+
+    @staticmethod
+    def _hex_rgb(hex_color: str) -> tuple[float, float, float]:
+        h = hex_color.lstrip("#")
+        return tuple(int(h[i:i + 2], 16) / 255.0 for i in (0, 2, 4))
+
+    def show_mesh_patches(self, case_dir: Path) -> list[str]:
+        """Mesh stage: load the meshed boundary patches as individually-
+        colorable actors (neutral grey, edged). Returns the patch names, or []
+        when the reader can't load them."""
+        foam_file = case_dir / "case.foam"
+        try:
+            foam_file.touch()
+            reader = pv.OpenFOAMReader(str(foam_file))
+            reader.enable_all_patch_arrays()
+            boundaries = reader.read()["boundary"]
+        except Exception:
+            return []
+        self.plotter.clear()
+        self._mesh_patch_actors = {}
+        names = list(boundaries.keys())
+        for name in names:
+            actor = self.plotter.add_mesh(
+                boundaries[name], name=f"_mpatch_{name}",
+                color=COLORS["text-2"], show_edges=True,
+                edge_color=COLORS["border"], smooth_shading=False)
+            self._mesh_patch_actors[name] = actor
+        self.plotter.reset_camera()
+        return names
+
+    def color_selected_patches(self, selected: list[str]) -> None:
+        """Highlight the selected meshed patches, each a distinct colour; fade
+        the rest. Empty selection restores the neutral mesh."""
+        actors = getattr(self, "_mesh_patch_actors", {})
+        sel = list(selected)
+        neutral = self._hex_rgb(COLORS["text-2"])
+        for name, actor in actors.items():
+            prop = actor.GetProperty()
+            if not sel:
+                prop.SetColor(*neutral)
+                prop.SetOpacity(1.0)
+            elif name in sel:
+                color = self._PATCH_PALETTE[sel.index(name) % len(self._PATCH_PALETTE)]
+                prop.SetColor(*self._hex_rgb(color))
+                prop.SetOpacity(1.0)
+            else:
+                prop.SetColor(*neutral)
+                prop.SetOpacity(0.2)
+        self.plotter.render()
+
     def load_openfoam_mesh(self, case_dir: Path) -> int | None:
         """Mesh preview (§4.3.3): surface-with-edges of the current polyMesh.
 
