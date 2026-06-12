@@ -76,8 +76,10 @@ TABLE_ROW_HEIGHT = 28
 RAIL_WIDTH = 220
 RAIL_COLLAPSED_WIDTH = 56  # icon-only rail
 # One consistent side-panel width across every stage (was a ragged 320-520).
-# Forms taller than the viewport scroll inside this width.
-RIGHT_PANEL_WIDTH = 380
+# Forms scroll vertically inside this width; controls are compact (equal-stretch
+# vec3 fields, wrapping badges, internally-scrolling tables) so the panel never
+# needs a horizontal scrollbar. Verified: every stage's content fits within it.
+RIGHT_PANEL_WIDTH = 420
 RIGHT_PANEL_MIN = 280
 RIGHT_PANEL_MAX = 420
 DRAWER_HEIGHT = 280

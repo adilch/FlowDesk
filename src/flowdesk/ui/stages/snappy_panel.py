@@ -87,6 +87,10 @@ class SnappyPanel(QWidget):
         self.surface_table = QTableWidget(0, len(SURFACE_COLUMNS))
         self.surface_table.setHorizontalHeaderLabels(SURFACE_COLUMNS)
         self.surface_table.setMaximumHeight(140)
+        # this 10-column table is wider than the panel: let it scroll internally
+        # rather than forcing a scrollbar on the whole panel
+        self.surface_table.setMinimumWidth(160)
+        self.surface_table.horizontalHeader().setMinimumSectionSize(44)
         layout.addWidget(self.surface_table)
 
         layout.addWidget(QLabel("Refinement regions"))

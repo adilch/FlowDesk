@@ -8,13 +8,14 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import QPoint, QRect, QSize, Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QButtonGroup,
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QLineEdit,
     QPlainTextEdit,
     QPushButton,
@@ -25,6 +26,68 @@ from PyQt6.QtWidgets import (
 )
 
 from flowdesk.ui.theme import CONTROL_RHYTHM, RIGHT_PANEL_WIDTH, STAGE_STATUSES, repolish
+
+
+class FlowLayout(QLayout):
+    """A layout that lays out items left-to-right and wraps to the next line -
+    so chip/badge rows fit a narrow panel instead of forcing horizontal scroll."""
+
+    def __init__(self, parent: QWidget | None = None, spacing: int = 6):
+        super().__init__(parent)
+        self._items: list = []
+        self._spacing = spacing
+        self.setContentsMargins(0, 0, 0, 0)
+
+    def addItem(self, item) -> None:  # noqa: N802 (Qt override)
+        self._items.append(item)
+
+    def count(self) -> int:
+        return len(self._items)
+
+    def itemAt(self, i: int):  # noqa: N802
+        return self._items[i] if 0 <= i < len(self._items) else None
+
+    def takeAt(self, i: int):  # noqa: N802
+        return self._items.pop(i) if 0 <= i < len(self._items) else None
+
+    def expandingDirections(self):  # noqa: N802
+        return Qt.Orientation(0)
+
+    def hasHeightForWidth(self) -> bool:  # noqa: N802
+        return True
+
+    def heightForWidth(self, width: int) -> int:  # noqa: N802
+        return self._do_layout(QRect(0, 0, width, 0), test_only=True)
+
+    def setGeometry(self, rect) -> None:  # noqa: N802
+        super().setGeometry(rect)
+        self._do_layout(rect, test_only=False)
+
+    def sizeHint(self):  # noqa: N802
+        return self.minimumSize()
+
+    def minimumSize(self):  # noqa: N802
+        size = QSize()
+        for item in self._items:
+            size = size.expandedTo(item.minimumSize())
+        m = self.contentsMargins()
+        return QSize(size.width() + m.left() + m.right(),
+                     size.height() + m.top() + m.bottom())
+
+    def _do_layout(self, rect, test_only: bool) -> int:
+        x, y, line_h = rect.x(), rect.y(), 0
+        for item in self._items:
+            w = item.sizeHint().width()
+            h = item.sizeHint().height()
+            if x + w > rect.right() and line_h > 0:
+                x = rect.x()
+                y += line_h + self._spacing
+                line_h = 0
+            if not test_only:
+                item.setGeometry(QRect(QPoint(x, y), item.sizeHint()))
+            x += w + self._spacing
+            line_h = max(line_h, h)
+        return y + line_h - rect.y()
 
 
 def split_viewer_panel(root_layout, viewer_slot, side_panel,
@@ -120,6 +183,7 @@ class UnitLineEdit(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         self._edit = QLineEdit(self._format(value))
+        self._edit.setMinimumWidth(48)  # don't demand width in a narrow panel
         self._edit.editingFinished.connect(self._commit)
         layout.addWidget(self._edit)
         if unit:
@@ -171,12 +235,16 @@ class Vec3Input(QWidget):
         for axis, v in zip("xyz", value, strict=True):
             field = UnitLineEdit(unit="", value=v)
             field._edit.setPlaceholderText(axis)
+            # compact: small minimum + equal stretch so three fields share the
+            # control width and never force a horizontal scrollbar
+            field._edit.setMinimumWidth(30)
             field.valueChanged.connect(self._emit)
             self._fields.append(field)
-            layout.addWidget(field)
-        suffix = QLabel(unit)
-        suffix.setProperty("role", "unit")
-        layout.addWidget(suffix)
+            layout.addWidget(field, stretch=1)
+        if unit:
+            suffix = QLabel(unit)
+            suffix.setProperty("role", "unit")
+            layout.addWidget(suffix)
 
     def value(self) -> tuple[float, float, float]:
         x, y, z = (f.value() for f in self._fields)

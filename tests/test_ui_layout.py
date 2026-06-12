@@ -141,4 +141,4 @@ def test_panel_widths_unified() -> None:
     for path in src:
         text = Path(path).read_text(encoding="utf-8")
         assert "RIGHT_PANEL_WIDTH + " not in text, f"{path} still pads the panel width"
-    assert RIGHT_PANEL_WIDTH == 380
+    assert RIGHT_PANEL_WIDTH == 420

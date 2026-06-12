@@ -67,8 +67,9 @@ class BackgroundPanel(QWidget):
             spin = QSpinBox()
             spin.setRange(1, 10_000)
             spin.setValue(block.cells[i])
+            spin.setMinimumWidth(48)  # compact: three share the control column
             self.cells.append(spin)
-            cells_row.addWidget(spin)
+            cells_row.addWidget(spin, stretch=1)
         holder = QWidget()
         holder.setLayout(cells_row)
         grid.addWidget(holder, 2, 1)
@@ -92,6 +93,9 @@ class BackgroundPanel(QWidget):
         self.patch_table = QTableWidget(0, 3)
         self.patch_table.setHorizontalHeaderLabels(["Name", "Type", "Faces"])
         self.patch_table.setMaximumHeight(170)
+        # the Faces column holds long lists - let the table scroll internally
+        self.patch_table.setMinimumWidth(160)
+        self.patch_table.horizontalHeader().setMinimumSectionSize(44)
         form.addWidget(self.patch_table)
         self._fill_patch_table()
         form.addStretch()

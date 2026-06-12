@@ -24,7 +24,7 @@ from PyQt6.QtWidgets import (
 
 from flowdesk.app import scenario
 from flowdesk.app.projects import ProjectSession
-from flowdesk.ui.components import CollapsibleGroup, make_button
+from flowdesk.ui.components import CollapsibleGroup, FlowLayout, make_button
 from flowdesk.ui.theme import repolish
 
 
@@ -79,9 +79,8 @@ class ModelSelector(QWidget):
         solver.setProperty("role", "title")
         self._body_layout.addWidget(solver)
 
-        # feature badges
-        badges = QHBoxLayout()
-        badges.setSpacing(6)
+        # feature badges - wrap to multiple lines so they never force scroll
+        badges = FlowLayout(spacing=6)
         interactive: list[scenario.Feature] = []
         for feat in scenario.feature_badges(model):
             if feat.interactive:
@@ -90,7 +89,6 @@ class ModelSelector(QWidget):
             chip.setProperty("chip", "true")
             chip.setProperty("status", "complete" if feat.on else "empty")
             badges.addWidget(chip)
-        badges.addStretch()
         wrap = QWidget()
         wrap.setLayout(badges)
         self._body_layout.addWidget(wrap)
