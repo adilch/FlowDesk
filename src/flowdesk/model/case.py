@@ -195,6 +195,16 @@ class CaseModel(BaseModel):
                 out.append(Finding(
                     Severity.ERROR, Stage.PHYSICS,
                     "End time must be > 0. → Physics → Fix end time.", "physics.time.end_time"))
+            elif t.output_interval > t.end_time:
+                # adjustableRunTime writes only at multiples of the interval; a
+                # write interval past endTime means the run saves NOTHING and
+                # reconstructPar reports 'No times selected'.
+                out.append(Finding(
+                    Severity.ERROR, Stage.RUN,
+                    f"Output interval ({t.output_interval:g} s) is larger than the "
+                    f"end time ({t.end_time:g} s): the run would finish without "
+                    "writing any results. → Run → Lower the write interval.",
+                    "run.write_interval"))
         i = self.physics.turb_ref.intensity
         if not 0.1 <= i <= 20:
             out.append(Finding(

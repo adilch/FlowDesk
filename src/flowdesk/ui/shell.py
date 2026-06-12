@@ -154,6 +154,9 @@ class ProjectShell(QWidget):
             self._color_patches()
         elif stage is Stage.RESULTS:
             self.results_stage.refresh()
+        elif stage is Stage.RUN:
+            # write controls track the current steady/transient choice
+            self.run_stage.refresh_write_controls()
         else:
             self._refresh_viewer()
 

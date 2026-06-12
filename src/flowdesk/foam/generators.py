@@ -294,6 +294,11 @@ def control_dict(model: CaseModel) -> str:
         ]
     else:
         t = p.time
+        # Safety net: adjustableRunTime writes at multiples of the interval and
+        # NOT automatically at endTime, so an interval past endTime saves nothing
+        # (reconstructPar then reports 'No times selected'). Clamp so the final
+        # frame is always written; validation also flags interval > endTime.
+        write_interval = min(t.output_interval, t.end_time)
         lines = [
             entry("application", p.solver),
             "",
@@ -312,7 +317,7 @@ def control_dict(model: CaseModel) -> str:
         lines += [
             "",
             entry("writeControl", "adjustableRunTime"),
-            entry("writeInterval", t.output_interval),
+            entry("writeInterval", write_interval),
             entry("purgeWrite", model.run.purge_write_transient),
         ]
     lines += [

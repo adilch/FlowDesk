@@ -203,6 +203,25 @@ class RunStage(QWidget):
         self._ui_timer.setInterval(500)  # plot refresh <= 2 Hz; data arrives at tail rate
         self._ui_timer.timeout.connect(self._refresh_monitoring)
 
+    def refresh_write_controls(self) -> None:
+        """Re-sync write controls to the current time treatment. Without this,
+        a steady 'every 200 iterations' leaks into a transient run as 'every
+        200 seconds' - which, past a short endTime, writes zero results."""
+        steady = self.session.model.physics.is_steady
+        self.write_every_label.setText(
+            "Write every (iterations)" if steady else "Write every (seconds)")
+        self.write_interval.blockSignals(True)
+        self.write_interval.setDecimals(0 if steady else 4)
+        self.write_interval.setValue(
+            self.session.model.run.write_interval_steady if steady
+            else self.session.model.physics.time.output_interval)
+        self.write_interval.blockSignals(False)
+        self.purge.blockSignals(True)
+        self.purge.setValue(self.session.model.run.purge_write if steady
+                            else self.session.model.run.purge_write_transient)
+        self.purge.blockSignals(False)
+        self._update_disk_estimate()
+
     # ------------------------------------------------------------------ start
 
     def collect(self) -> None:
