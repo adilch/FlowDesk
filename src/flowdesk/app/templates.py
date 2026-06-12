@@ -339,6 +339,74 @@ def dam_breach_3d(name: str) -> CaseModel:
     return model
 
 
+def dam_break_weir(name: str) -> CaseModel:
+    """Flow over Weir - the SimFlow dam-break tutorial, replicated exactly with
+    the tutorial's own dam.stl (a 2 x 30 x 15 m dam with a central spillway
+    breach). interFoam free surface: the 50 x 30 x 20 m domain is meshed with
+    the dam carved out (material point (10,15,5)); the reservoir box
+    [-20..0, 0..30, 0..9] is initialized full of water; a 250 m^3/s inlet feeds
+    it. Full 60 s of flow as in the tutorial; parallel for speed."""
+    model = CaseModel(meta=ProjectMeta(name=name))
+    model.physics.turbulence = Turbulence.LAMINAR
+    model.physics.fluid = Fluid(name="water", nu=1e-6, rho=1000.0)
+    model.physics.time = TransientTime(
+        end_time=60.0, output_interval=0.5, max_courant=1.0, initial_dt=0.01)
+    model.physics.free_surface = FreeSurfaceModel(
+        light_phase=Fluid(name="air", nu=1.48e-5, rho=1.0),
+        sigma=0.07,
+        gravity=(0.0, 0.0, -9.81),
+        water_column_min=(-20.0, 0.0, 0.0),  # the tutorial's water_init box
+        water_column_max=(0.0, 30.0, 9.0),
+    )
+    model.mesh.block = BlockMeshModel(
+        bounds_min=(-20.0, 0.0, 0.0),
+        bounds_max=(30.0, 30.0, 20.0),
+        cells=(70, 45, 30),  # the tutorial's base mesh divisions
+        patches=[
+            BlockPatch(name="inlet", faces=[BlockFace.X_MIN]),
+            BlockPatch(name="outlet", faces=[BlockFace.X_MAX]),
+            BlockPatch(name="sides", faces=[BlockFace.Y_MIN, BlockFace.Y_MAX]),
+            BlockPatch(name="bottom", type="wall", faces=[BlockFace.Z_MIN]),
+            BlockPatch(name="top", faces=[BlockFace.Z_MAX]),
+        ],
+    )
+    model.mesh.snappy.surfaces = [
+        SurfaceRefinement(surface="dam", level_min=1, level_max=2)]
+    model.mesh.snappy.location_in_mesh = (10.0, 15.0, 5.0)  # tutorial material point
+
+    # Tutorial inlet: 250 m^3/s volumetric flow, zero-gradient phase (the inlet
+    # face spans water and air); fixed-flux-pressure / inlet-outlet outlet.
+    model.boundaries = {
+        "inlet": VelocityInlet(mode="volumetricFlowRate",
+                               volumetric_flow_rate=250.0, alpha_water=None),
+        "outlet": PressureOutlet(outlet_type="fixedFlux"),
+        "sides": SlipWall(),
+        "bottom": Wall(),
+        "top": Atmosphere(),
+        "dam": Wall(),
+    }
+    model.run.mode = RunMode.PARALLEL
+    model.run.cores = 4
+    return model
+
+
+def _prepare_dam_weir(model: CaseModel, case_dir: Path) -> None:
+    """Copy the tutorial's bundled dam.stl (the real spillway geometry) into the
+    case and import it as the 'dam' obstacle surface."""
+    from importlib import resources
+
+    from flowdesk.app import geometry_io
+
+    source = case_dir / "_dam_simflow.stl"
+    data = resources.files("flowdesk.data").joinpath("dam_simflow.stl").read_bytes()
+    source.write_bytes(data)
+    surface = geometry_io.import_surface(source, case_dir, name="dam")
+    source.unlink()
+    surface.stl_path = "(SimFlow dam-break tutorial geometry)"
+    model.geometry.surfaces = [surface]
+    model.geometry.blockmesh_only = False
+
+
 def _prepare_dam_breach(model: CaseModel, case_dir: Path) -> None:
     """Generate dam.stl: a 12 m dam wall across the valley at x = 0..2 with a
     6 m wide central breach (y 12..18). Two disjoint closed boxes in one STL -
@@ -409,6 +477,7 @@ TEMPLATES: dict[str, Callable[[str], CaseModel]] = {
     "External aero": external_aero,
     "Open channel": open_channel,
     "Flow over a weir": weir_flow,
+    "Flow over Weir": dam_break_weir,
     "Dam break (2D column)": dam_break,
     "Dam break (3D breach)": dam_breach_3d,
     "Vortex shedding (transient)": vortex_shedding,
@@ -428,6 +497,9 @@ TEMPLATE_DESCRIPTIONS: dict[str, str] = {
                         "convergence history. Steady SST, parallel.",
     "Dam break (2D column)": "The canonical interFoam benchmark: a water column "
                              "collapses across a tank. 2D, laminar, fast.",
+    "Flow over Weir": "The SimFlow dam-break tutorial, replicated exactly with its "
+                      "own dam.stl (spillway breach), 70×45×30 mesh, 250 m³/s inlet, "
+                      "60 s interFoam. An example to use and modify.",
     "Dam break (3D breach)": "SimFlow-style 3D dam breach: a valley domain with the "
                              "dam carved out, reservoir behind it. interFoam.",
     "Vortex shedding (transient)": "Laminar von Kármán street behind a square "
@@ -437,6 +509,7 @@ TEMPLATE_DESCRIPTIONS: dict[str, str] = {
 # Run after the case directory exists, before the first write (geometry-bearing
 # templates generate their STL here)
 TEMPLATE_PREPARERS: dict[str, Callable[[CaseModel, Path], None]] = {
+    "Flow over Weir": _prepare_dam_weir,
     "Vortex shedding (transient)": _prepare_vortex_shedding,
     "Flow over a weir": _prepare_weir_flow,
     "Dam break (3D breach)": _prepare_dam_breach,
