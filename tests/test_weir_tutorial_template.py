@@ -17,7 +17,7 @@ requires_openfoam = pytest.mark.skipif(
 
 
 def test_matches_tutorial_settings(tmp_path) -> None:
-    session = projects.create_project("w", tmp_path, "Flow over Weir")
+    session = projects.create_project("w", tmp_path, "Flow over Weir (multi-phase)")
     m = session.model
     m.validated()
     # the real tutorial geometry (not a generated box): a 2 x 30 x 15 m dam
@@ -53,7 +53,7 @@ def test_bundled_stl_is_resource() -> None:
 def test_meshes_and_runs_short(qtbot, tmp_path) -> None:
     """Short run (the full 60 s is minutes): mesh the domain with the dam carved
     out, then a couple of interFoam steps that stay finite."""
-    session = projects.create_project("wrun", tmp_path, "Flow over Weir")
+    session = projects.create_project("wrun", tmp_path, "Flow over Weir (multi-phase)")
     session.model.mesh.block.cells = (35, 22, 15)  # coarse for CI walltime
     session.model.physics.time.end_time = 1.0
     session.model.physics.time.output_interval = 0.5

@@ -382,8 +382,8 @@ class HomeScreen(QWidget):
         v.addWidget(quick_title)
         grid = QHBoxLayout()
         grid.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        for tmpl in ("Lid-driven cavity", "Dam break (3D breach)",
-                     "Flow over a weir", "Vortex shedding (transient)"):
+        for tmpl in ("Lid-driven cavity", "Flow over Weir (multi-phase)",
+                     "Dam break (3D breach)", "Vortex shedding (transient)"):
             if tmpl in TEMPLATES:
                 b = make_button(tmpl.split(" (")[0])
                 b.clicked.connect(lambda _=False, t=tmpl: self._quick_create(t))

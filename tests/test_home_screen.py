@@ -71,9 +71,9 @@ def test_quick_create_emits(qtbot, tmp_path, monkeypatch) -> None:
     qtbot.addWidget(home)
     created: list[tuple] = []
     home.create_requested.connect(lambda n, loc, t: created.append((n, t)))
-    home._quick_create("Flow over a weir")
-    assert created and created[-1][1] == "Flow over a weir"
-    assert created[-1][0].startswith("flow-over-a-weir")
+    home._quick_create("Flow over Weir (single-phase)")
+    assert created and created[-1][1] == "Flow over Weir (single-phase)"
+    assert created[-1][0].startswith("flow-over-weir")
 
 
 def test_empty_recent_shows_note(qtbot, tmp_path, monkeypatch) -> None:

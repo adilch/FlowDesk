@@ -83,7 +83,7 @@ def test_default_slice_orientation(qtbot, tmp_path) -> None:
     assert stage2.normal_seg.current() == 1
 
     # single-phase 3D (weir): unchanged mid-depth Z cut
-    weir = projects.create_project("w", tmp_path, "Flow over a weir")
+    weir = projects.create_project("w", tmp_path, "Flow over Weir (single-phase)")
     stage3 = ResultsStage(weir, viewer)
     qtbot.addWidget(stage3)
     assert stage3.normal_seg.current() == 2

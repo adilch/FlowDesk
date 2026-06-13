@@ -1,4 +1,4 @@
-"""Flow over a weir template + the reconstruct-all-times fix.
+"""Flow over Weir (single-phase) template + the reconstruct-all-times fix.
 
 The e2e test runs the template in parallel through the real SolverSupervisor
 script and asserts MULTIPLE reconstructed time directories - the user-reported
@@ -21,7 +21,7 @@ requires_openfoam = pytest.mark.skipif(
 
 
 def test_weir_template_validates(tmp_path) -> None:
-    session = projects.create_project("weir", tmp_path, "Flow over a weir")
+    session = projects.create_project("weir", tmp_path, "Flow over Weir (single-phase)")
     model = session.model
     model.validated()
     assert model.physics.solver == "simpleFoam"
@@ -39,7 +39,7 @@ def test_weir_template_validates(tmp_path) -> None:
 
 @requires_openfoam
 def test_weir_runs_parallel_with_full_history(qtbot, tmp_path) -> None:
-    session = projects.create_project("weir-run", tmp_path, "Flow over a weir")
+    session = projects.create_project("weir-run", tmp_path, "Flow over Weir (single-phase)")
     session.model.run.cores = 2
     session.model.run.max_iterations = 300  # 3 saved frames at interval 100
 

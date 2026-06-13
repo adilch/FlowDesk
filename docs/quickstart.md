@@ -117,7 +117,7 @@ case) — use *Reset case & rerun* to start the collapse over.
 
 ## Hydraulics: flow over a weir
 
-The **Flow over a weir** template is a channel with a generated half-depth weir:
+The **Flow over Weir (single-phase)** template is a channel with a generated half-depth weir:
 water accelerates over the crest and recirculates downstream — slice on Y at
 mid-channel to see it. It saves every 100th iteration with nothing purged, so
 the **Results time selector lets you scrub through the convergence history**,
