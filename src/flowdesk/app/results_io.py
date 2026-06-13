@@ -118,6 +118,18 @@ def scalar_array(dataset: pv.DataSet, field_label: str) -> tuple[str, np.ndarray
     return key, values
 
 
+def field_range(results: LoadedResults, field_label: str) -> tuple[float, float] | None:
+    """(min, max) of a scalar field over the internal mesh, for the color range
+    controls. None when the field is absent."""
+    try:
+        _key, values = scalar_array(results.mesh.copy(), field_label)
+    except KeyError:
+        return None
+    if values.size == 0:
+        return None
+    return (float(values.min()), float(values.max()))
+
+
 def slice_plane(results: LoadedResults, origin, normal) -> pv.PolyData:
     return results.mesh.slice(normal=normal, origin=origin)
 

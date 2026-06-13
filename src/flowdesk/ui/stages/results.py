@@ -6,7 +6,7 @@ from __future__ import annotations
 import webbrowser
 from pathlib import Path
 
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QSlider,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -58,17 +59,38 @@ class ResultsStage(QWidget):
         title.setProperty("role", "title")
         form.addWidget(title)
 
-        # Time selector (§4.8: dropdown + first/prev/next/last, no animation)
+        # Time selector + animation (play through the saved time steps)
         time_row = QHBoxLayout()
         self.time_combo = QComboBox()
         self.time_combo.currentTextChanged.connect(lambda _t: self._reload())
+        time_row.addWidget(self.time_combo, stretch=1)
         for label, step in (("⏮", "first"), ("◀", "prev"), ("▶", "next"), ("⏭", "last")):
             btn = make_button(label, "ghost")
-            btn.setFixedWidth(36)
+            btn.setFixedWidth(34)
             btn.clicked.connect(lambda _=False, s=step: self._step_time(s))
             time_row.addWidget(btn)
-        time_row.insertWidget(0, self.time_combo, stretch=1)
+        self.play_btn = make_button("▶", "secondary")
+        self.play_btn.setFixedWidth(34)
+        self.play_btn.setToolTip("Play / pause through the time steps")
+        self.play_btn.clicked.connect(self._toggle_play)
+        time_row.addWidget(self.play_btn)
         form.addLayout(time_row)
+
+        speed_row = QHBoxLayout()
+        self.loop_chk = QCheckBox("Loop")
+        self.loop_chk.setChecked(True)
+        speed_row.addWidget(QLabel("Speed"))
+        self.speed_slider = QSlider(Qt.Orientation.Horizontal)
+        self.speed_slider.setRange(1, 20)  # frames per second
+        self.speed_slider.setValue(4)
+        self.speed_slider.valueChanged.connect(self._on_speed_changed)
+        speed_row.addWidget(self.speed_slider, stretch=1)
+        speed_row.addWidget(self.loop_chk)
+        form.addLayout(speed_row)
+
+        self._anim_timer = QTimer(self)
+        self._anim_timer.setInterval(250)
+        self._anim_timer.timeout.connect(self._advance_frame)
 
         grid = QGridLayout()
         grid.addWidget(QLabel("View"), 0, 0)
@@ -94,6 +116,31 @@ class ResultsStage(QWidget):
         self.origin.valueChanged.connect(lambda *_a: self.render())
         grid.addWidget(self.origin, 4, 1)
         form.addLayout(grid)
+
+        # Color range filter: auto (per-frame) or a fixed user range, with reset
+        range_title = QLabel("COLOR RANGE")
+        range_title.setProperty("role", "section")
+        form.addWidget(range_title)
+        self.auto_range_chk = QCheckBox("Auto (fit to each frame)")
+        self.auto_range_chk.setChecked(True)
+        self.auto_range_chk.toggled.connect(self._on_auto_range)
+        form.addWidget(self.auto_range_chk)
+        range_row = QHBoxLayout()
+        range_row.addWidget(QLabel("min"))
+        self.range_min = UnitLineEdit(value=0.0)
+        self.range_min.valueChanged.connect(lambda *_a: self.render())
+        range_row.addWidget(self.range_min)
+        range_row.addWidget(QLabel("max"))
+        self.range_max = UnitLineEdit(value=1.0)
+        self.range_max.valueChanged.connect(lambda *_a: self.render())
+        range_row.addWidget(self.range_max)
+        self.reset_range_btn = make_button("Reset")
+        self.reset_range_btn.setToolTip("Fill min/max from this field's data range")
+        self.reset_range_btn.clicked.connect(self._reset_range)
+        range_row.addWidget(self.reset_range_btn)
+        self._range_row = range_row
+        form.addLayout(range_row)
+        self._set_range_enabled(False)
 
         glyph_row = QHBoxLayout()
         self.glyphs_chk = QCheckBox("Vector glyphs")
@@ -216,6 +263,63 @@ class ResultsStage(QWidget):
                  "last": count - 1}[step]
         self.time_combo.setCurrentIndex(index)
 
+    # ------------------------------------------------------------------ animation
+
+    def _toggle_play(self) -> None:
+        if self._anim_timer.isActive():
+            self._stop_play()
+        elif self.time_combo.count() > 1:
+            self.play_btn.setText("⏸")
+            self._anim_timer.start()
+
+    def _stop_play(self) -> None:
+        self._anim_timer.stop()
+        self.play_btn.setText("▶")
+
+    def _advance_frame(self) -> None:
+        count = self.time_combo.count()
+        if count <= 1:
+            self._stop_play()
+            return
+        nxt = self.time_combo.currentIndex() + 1
+        if nxt >= count:
+            if not self.loop_chk.isChecked():
+                self._stop_play()
+                return
+            nxt = 0
+        self.time_combo.setCurrentIndex(nxt)
+
+    def _on_speed_changed(self, fps: int) -> None:
+        self._anim_timer.setInterval(int(1000 / max(1, fps)))
+
+    def hideEvent(self, event) -> None:  # noqa: N802 (Qt override)
+        self._stop_play()  # don't keep animating when the stage isn't visible
+        super().hideEvent(event)
+
+    # ------------------------------------------------------------------ color range
+
+    def _set_range_enabled(self, on: bool) -> None:
+        for i in range(self._range_row.count()):
+            w = self._range_row.itemAt(i).widget()
+            if w is not None:
+                w.setEnabled(on)
+
+    def _on_auto_range(self, auto: bool) -> None:
+        self._set_range_enabled(not auto)
+        if not auto and self.results is not None:
+            self._reset_range()  # seed manual fields from the data on first switch
+        else:
+            self.render()
+
+    def _reset_range(self) -> None:
+        if self.results is None:
+            return
+        rng = results_io.field_range(self.results, self.field_combo.currentText())
+        if rng is not None:
+            self.range_min.set_value(rng[0])
+            self.range_max.set_value(rng[1])
+        self.render()
+
     # ------------------------------------------------------------------ rendering
 
     def render(self) -> None:
@@ -233,6 +337,8 @@ class ResultsStage(QWidget):
                 "p_rgh is p − ρgh in Pa (interFoam) — true pressure minus the "
                 "hydrostatic column", "info")
         cmap = results_io.COLORMAPS[self.cmap_combo.currentText()]
+        clim = None if self.auto_range_chk.isChecked() else \
+            [self.range_min.value(), self.range_max.value()]
         plotter = self.viewer.plotter
         plotter.clear()
 
@@ -249,7 +355,7 @@ class ResultsStage(QWidget):
                         f"({block.bounds_min} … {block.bounds_max}).", "error")
                     return
                 key, _ = results_io.scalar_array(sliced, field)
-                plotter.add_mesh(sliced, scalars=key, cmap=cmap,
+                plotter.add_mesh(sliced, scalars=key, cmap=cmap, clim=clim,
                                  scalar_bar_args={"title": field})
                 if self.glyphs_chk.isChecked():
                     glyphs = results_io.glyphs_on_slice(
@@ -265,7 +371,7 @@ class ResultsStage(QWidget):
                     patch = self.results.boundaries[name]
                     try:
                         key, _ = results_io.scalar_array(patch, field)
-                        plotter.add_mesh(patch, scalars=key, cmap=cmap)
+                        plotter.add_mesh(patch, scalars=key, cmap=cmap, clim=clim)
                     except KeyError:
                         plotter.add_mesh(patch, color=COLORS["text-2"], opacity=0.3)
             plotter.reset_camera()

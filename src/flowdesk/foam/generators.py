@@ -172,9 +172,14 @@ def snappy_hex_mesh_dict(model: CaseModel) -> str:
     # background mesh but adds no refinement: feature/surface levels forced to 0
     # and refinement regions skipped.
     refine = g.refinement_enabled
+
+    def _feat_level(r) -> int:
+        if not refine:
+            return 0
+        return r.feature_level if r.feature_level is not None else r.level_max
+
     features = " ".join(
-        f'{{ file "{r.surface}.eMesh"; '
-        f"level {(r.feature_level if r.feature_level is not None else r.level_max) if refine else 0}; }}"
+        f'{{ file "{r.surface}.eMesh"; level {_feat_level(r)}; }}'
         for r in s.surfaces
     )
     cast.append(f"features ( {features} );")
