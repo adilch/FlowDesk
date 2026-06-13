@@ -93,6 +93,10 @@ class SnappyGlobals(BaseModel):
 
     castellated: bool = True
     snap: bool = True
+    # When False, snappy still snaps the geometry into the background mesh but
+    # adds NO refinement (surface levels forced to 0, refinement regions skipped)
+    # - a fast, coarse, geometry-conforming mesh.
+    refinement_enabled: bool = True
     max_global_cells: int = 20_000_000
     max_local_cells: int = 1_000_000
     cells_between_levels: int = 3

@@ -156,8 +156,9 @@ def snappy_hex_mesh_dict(model: CaseModel) -> str:
     geo: list[str] = []
     for surf in model.geometry.surfaces:
         geo.append(f"{surf.name}.stl {{ type triSurfaceMesh; name {surf.name}; }}")
-    for region in s.regions:
-        geo.append(_region_geometry(region))
+    if g.refinement_enabled:  # refinement-region geometry is unused when off
+        for region in s.regions:
+            geo.append(_region_geometry(region))
     lines += block("geometry", geo) + [""]
 
     cast: list[str] = [
@@ -167,19 +168,27 @@ def snappy_hex_mesh_dict(model: CaseModel) -> str:
         entry("nCellsBetweenLevels", g.cells_between_levels),
         "",
     ]
+    # When refinement is disabled, snappy still snaps the geometry into the
+    # background mesh but adds no refinement: feature/surface levels forced to 0
+    # and refinement regions skipped.
+    refine = g.refinement_enabled
     features = " ".join(
         f'{{ file "{r.surface}.eMesh"; '
-        f"level {r.feature_level if r.feature_level is not None else r.level_max}; }}"
+        f"level {(r.feature_level if r.feature_level is not None else r.level_max) if refine else 0}; }}"
         for r in s.surfaces
     )
     cast.append(f"features ( {features} );")
     cast.append("")
-    refinement = [f"{r.surface} {{ level ({r.level_min} {r.level_max}); }}" for r in s.surfaces]
+    refinement = [
+        f"{r.surface} {{ level ({r.level_min} {r.level_max}); }}" if refine
+        else f"{r.surface} {{ level (0 0); }}"
+        for r in s.surfaces
+    ]
     cast += block("refinementSurfaces", refinement)
     cast.append("")
     regions = [
         f"{r.name} {{ mode {r.mode}; levels ((1E15 {r.level})); }}" for r in s.regions
-    ]
+    ] if refine else []
     cast += block("refinementRegions", regions)
     cast.append("")
     location = s.location_in_mesh if s.location_in_mesh is not None else (0.0, 0.0, 0.0)

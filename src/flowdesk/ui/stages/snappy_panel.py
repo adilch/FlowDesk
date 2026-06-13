@@ -10,6 +10,7 @@ import re
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
+    QCheckBox,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -82,6 +83,18 @@ class SnappyPanel(QWidget):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 8, 0, 0)
+
+        # Apply refinement or not: when off, snappy still snaps the geometry into
+        # the background mesh but adds no refinement (fast, coarse, conforming).
+        self.refine_chk = QCheckBox("Apply surface refinement")
+        self.refine_chk.setToolTip(
+            "On: snappy refines the mesh near the geometry to the levels below.\n"
+            "Off: snappy still snaps the geometry into the background mesh but "
+            "adds no refinement — a fast, coarse, geometry-conforming mesh.")
+        self.refine_chk.setChecked(
+            self.session.model.mesh.snappy.globals.refinement_enabled)
+        self.refine_chk.toggled.connect(self._on_refine_toggled)
+        layout.addWidget(self.refine_chk)
 
         layout.addWidget(QLabel("Surface refinement"))
         self.surface_table = QTableWidget(0, len(SURFACE_COLUMNS))
@@ -170,6 +183,12 @@ class SnappyPanel(QWidget):
 
     def refresh_from_model(self) -> None:
         # repopulating must not fire live-preview signals
+        on = self.session.model.mesh.snappy.globals.refinement_enabled
+        self.refine_chk.blockSignals(True)
+        self.refine_chk.setChecked(on)
+        self.refine_chk.blockSignals(False)
+        self.surface_table.setEnabled(on)
+        self.region_table.setEnabled(on)
         self.surface_table.blockSignals(True)
         self.region_table.blockSignals(True)
         try:
@@ -271,6 +290,7 @@ class SnappyPanel(QWidget):
 
         snappy.location_in_mesh = self.location_input.value()
         g = snappy.globals
+        g.refinement_enabled = self.refine_chk.isChecked()
         g.cells_between_levels = self.cells_between.value()
         g.resolve_feature_angle = self.feature_angle.value()
         g.max_global_cells = self.max_global.value()
@@ -280,6 +300,13 @@ class SnappyPanel(QWidget):
         return problems
 
     # ------------------------------------------------------------------ actions
+
+    def _on_refine_toggled(self, on: bool) -> None:
+        # grey out the refinement controls when refinement is off
+        self.surface_table.setEnabled(on)
+        self.region_table.setEnabled(on)
+        self.session.model.mesh.snappy.globals.refinement_enabled = on
+        self.changed.emit()
 
     def suggest_location(self) -> None:
         self._clear_banners()
