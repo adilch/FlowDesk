@@ -15,6 +15,21 @@ locks them away in a proprietary format.
 
 ---
 
+## Screenshots
+
+A complete dam-break (free-surface `interFoam`) walkthrough, stage by stage:
+
+| | |
+|:--:|:--:|
+| ![Landing screen](docs/screenshots/01-landing.png) | ![Geometry stage](docs/screenshots/02-geometry.png) |
+| **Landing** — recent projects, environment status, and one-click templates. | **Geometry** — imported STL with watertight/normals diagnostics and the domain box. |
+| ![Mesh stage](docs/screenshots/03-mesh.png) | ![Physics stage](docs/screenshots/04-physics.png) |
+| **Mesh** — `snappyHexMesh` result with a `checkMesh` traffic-light quality report. | **Physics** — the model wizard resolving to `interFoam`, with the feature summary. |
+| ![Run stage](docs/screenshots/05-run.png) | ![Results stage](docs/screenshots/06-results.png) |
+| **Run** — live residuals, write controls, and runtime monitors during a parallel solve. | **Results** — `alpha.water` slice with the time-step animation and color-range controls. |
+
+---
+
 ## Why FlowDesk?
 
 OpenFOAM is the most capable open-source CFD suite in existence, but its native
